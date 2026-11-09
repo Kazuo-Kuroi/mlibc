@@ -70,20 +70,21 @@ int Sysdeps<TcbSet>::operator()(void *pointer) {
 	return sc(belka::SYS_lwpprivate, pointer).error;
 }
 
-pid_t Sysdeps<FutexTid>::operator()() {
-	return static_cast<pid_t>(sc(belka::SYS_lwpself).value);
-}
-
 /*
- * There is no futex-style wait yet, so contended locks cannot sleep.
- * A single-threaded program never contends one.
+ * Futexes are Belka's address waits: _lwp_addr_wait sleeps while the
+ * word holds the expected value, for a relative time; _lwp_addr_wake
+ * wakes one waiter or all of them.
  */
-int Sysdeps<FutexWait>::operator()(int *, int, const struct timespec *) {
-	return ENOSYS;
+int Sysdeps<FutexWait>::operator()(int *pointer, int expected, const struct timespec *time) {
+	return belka::sc(belka::SYS_lwp_addr_wait, pointer, expected, time).error;
 }
 
-int Sysdeps<FutexWake>::operator()(int *, bool) {
-	return ENOSYS;
+int Sysdeps<FutexWake>::operator()(int *pointer, bool all) {
+	return belka::sc(belka::SYS_lwp_addr_wake, pointer, all ? 0 : 1).error;
+}
+
+pid_t Sysdeps<FutexTid>::operator()() {
+	return static_cast<pid_t>(belka::sc(belka::SYS_lwpself).value);
 }
 
 int Sysdeps<AnonAllocate>::operator()(size_t size, void **pointer) {

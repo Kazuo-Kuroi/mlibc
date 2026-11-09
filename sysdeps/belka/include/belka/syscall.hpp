@@ -73,6 +73,8 @@ enum : long {
 	SYS_lwpself = 176,
 	SYS_lwpinfo = 177,
 	SYS_lwpprivate = 178,
+	SYS_lwp_addr_wait = 181,
+	SYS_lwp_addr_wake = 182,
 	SYS_pread = 189,
 	SYS_pwrite = 190,
 	SYS_ftruncate = 192,

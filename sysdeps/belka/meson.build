@@ -15,7 +15,9 @@ libc_sources += files(
 	'generic/entry.cpp',
 	'generic/generic.cpp',
 	'generic/signal.cpp',
+	'generic/thread.cpp',
 	host_machine.cpu_family() / 'sigtramp.S',
+	host_machine.cpu_family() / 'thread.S',
 )
 
 if not no_headers
