@@ -61,7 +61,9 @@ frg::manual_box<frg::vector<frg::string_view, MemoryAllocator>> preloads;
 
 static SharedObject *executableSO;
 static uintptr_t vdsoBase = 0;
-extern HIDDEN char __ehdr_start[];
+// Defined by GNU ld and lld, not by every linker; static builds prefer the
+// auxiliary vector and use it only when that lacks the program headers.
+extern HIDDEN char __ehdr_start[] __attribute__((weak));
 
 // Global debug interface variable
 DebugInterface globalDebugInterface;
@@ -602,11 +604,14 @@ extern "C" void *interpreterMain(uintptr_t *entry_stack) {
 #else
 	(void)env_ld_library_path;
 	(void)env_ld_preload;
-	auto ehdr = reinterpret_cast<elf_ehdr*>(__ehdr_start);
-	phdr_pointer = reinterpret_cast<void*>((uintptr_t)ehdr->e_phoff + (uintptr_t)ehdr);
-	phdr_entry_size = ehdr->e_phentsize;
-	phdr_count = ehdr->e_phnum;
-	entry_pointer = reinterpret_cast<void*>(ehdr->e_entry);
+	if(!phdr_pointer || !phdr_entry_size || !phdr_count || !entry_pointer) {
+		auto ehdr = reinterpret_cast<elf_ehdr*>(__ehdr_start);
+		__ensure(ehdr);
+		phdr_pointer = reinterpret_cast<void*>((uintptr_t)ehdr->e_phoff + (uintptr_t)ehdr);
+		phdr_entry_size = ehdr->e_phentsize;
+		phdr_count = ehdr->e_phnum;
+		entry_pointer = reinterpret_cast<void*>(ehdr->e_entry);
+	}
 #endif
 	__ensure(phdr_pointer);
 	__ensure(entry_pointer);
