@@ -4,6 +4,11 @@ sysdep_supported_options = {
 	'bsd': true,
 }
 
+# No GNU IFUNCs: static programs are linked by linkers that do not
+# support them (the illumos link-editor), and resolve no IRELATIVE
+# relocations. The generic string functions are used instead.
+internal_conf.set10('MLIBC_IFUNCS_SUPPORTED', false)
+
 rtld_include_dirs += include_directories('include')
 libc_include_dirs += include_directories('include')
 
