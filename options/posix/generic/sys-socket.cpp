@@ -90,7 +90,7 @@ ssize_t recvfrom(int sockfd, void *__restrict buf, size_t len, int flags,
 		struct sockaddr *__restrict src_addr, socklen_t *__restrict addrlen) {
 	if constexpr (mlibc::IsImplemented<Recvfrom>) {
 		ssize_t length;
-		if(int e = mlibc::sysdep<Recvfrom>(sockfd, buf, len, flags, src_addr, addrlen, &length); e) {
+		if(int e = mlibc::sysdep_or_enosys<Recvfrom>(sockfd, buf, len, flags, src_addr, addrlen, &length); e) {
 			errno = e;
 			return -1;
 		}
