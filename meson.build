@@ -320,6 +320,8 @@ elif host_machine.system() == 'ethereal'
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', false)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/ethereal')
+elif host_machine.system() == 'belka'
+	subdir('sysdeps/belka')
 # ANCHOR: demo-sysdeps
 elif host_machine.system() == 'demo'
 	subdir('sysdeps/demo')

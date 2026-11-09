@@ -1,0 +1,83 @@
+#pragma once
+
+#include <mlibc/sysdep-signatures.hpp>
+
+namespace mlibc {
+
+struct BelkaSysdepTags :
+	LibcLog,
+	LibcPanic,
+	Exit,
+	TcbSet,
+	FutexTid,
+	FutexWait,
+	FutexWake,
+	AnonAllocate,
+	AnonFree,
+	VmMap,
+	VmUnmap,
+	VmProtect,
+	Open,
+	Openat,
+	OpenDir,
+	ReadEntries,
+	Read,
+	Write,
+	Pread,
+	Pwrite,
+	Seek,
+	Close,
+	Dup,
+	Dup2,
+	Fcntl,
+	Ioctl,
+	Isatty,
+	Stat,
+	Access,
+	Readlink,
+	Ftruncate,
+	Chdir,
+	Fchdir,
+	Mkdir,
+	Rmdir,
+	Unlinkat,
+	Rename,
+	Link,
+	Symlink,
+	Umask,
+	Sync,
+	ClockGet,
+	Uname,
+	GetHostname,
+	GetPid,
+	GetPpid,
+	GetTid,
+	GetUid,
+	GetEuid,
+	GetGid,
+	GetEgid,
+	GetPgid,
+	SetPgid,
+	GetSid,
+	SetSid,
+	Fork,
+	Execve,
+	Waitpid,
+	Kill,
+	Sigaction,
+	Sigprocmask,
+	ThreadSigmask,
+	Sigsuspend,
+	Sigpending,
+	Sigaltstack,
+	Pause
+{};
+
+template<typename Tag>
+using Sysdeps = SysdepOf<BelkaSysdepTags, Tag>;
+
+struct SysdepTraits {
+	static constexpr bool usesRtNetlink = false;
+};
+
+} // namespace mlibc
