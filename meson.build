@@ -657,14 +657,21 @@ if not headers_only
 			dependencies: rtld_deps + rtlib_deps,
 			install: false
 		)
+		libc_sublibs_objects = []
+		foreach sublib : libc_sublibs
+			libc_sublibs_objects += sublib.extract_all_objects(recursive: true)
+		endforeach
 		libc_static = static_library('c', libc_all_sources,
 			c_args: mlibc_c_args,
 			cpp_args: static_cpp_args + ['-fno-stack-protector', libc_cpp_args],
 			link_args: mlibc_link_args,
 			include_directories: libc_include_dirs,
 			dependencies: libc_deps + rtlib_deps,
-			link_with: [ld_static_lib],
-			link_whole: [libc_sublibs, ld_static_lib],
+			# The objects of the sub-libraries and the static rtld go into
+			# libc.a itself: the same as link_whole, which not every meson
+			# implementation (muon, for one) applies to a static library.
+			objects: [ld_static_lib.extract_all_objects(recursive: true)] +
+				libc_sublibs_objects,
 			install: true
 		)
 	endif
