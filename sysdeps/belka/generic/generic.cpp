@@ -11,7 +11,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <sys/times.h>
+#include <sys/uio.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <belka/syscall.hpp>
 #include <mlibc/all-sysdeps.hpp>
@@ -229,6 +232,62 @@ int Sysdeps<Seek>::operator()(int fd, off_t offset, int whence, off_t *new_offse
 	return 0;
 }
 
+/* pipe() returns the read end in %rax and the write end in %rdx. */
+int Sysdeps<Pipe>::operator()(int *fds, int flags) {
+	if (flags & ~(O_CLOEXEC | O_NONBLOCK))
+		return EINVAL;
+	auto r = sc(belka::SYS_pipe);
+	if (r.error)
+		return r.error;
+	int ends[2] = {static_cast<int>(r.value), static_cast<int>(r.value2)};
+	for (int fd : ends) {
+		int e = 0;
+		if (flags & O_CLOEXEC)
+			e = set_cloexec(fd);
+		if (!e && (flags & O_NONBLOCK)) {
+			auto fl = sc(belka::SYS_fcntl, fd, F_GETFL);
+			e = fl.error ? fl.error
+				: sc(belka::SYS_fcntl, fd, F_SETFL, fl.value | O_NONBLOCK).error;
+		}
+		if (e) {
+			sc(belka::SYS_close, ends[0]);
+			sc(belka::SYS_close, ends[1]);
+			return e;
+		}
+	}
+	fds[0] = ends[0];
+	fds[1] = ends[1];
+	return 0;
+}
+
+int Sysdeps<Readv>::operator()(int fd, const struct iovec *iovs, int iovc, ssize_t *bytes_read) {
+	auto r = sc(belka::SYS_readv, fd, iovs, iovc);
+	if (r.error)
+		return r.error;
+	*bytes_read = r.value;
+	return 0;
+}
+
+int Sysdeps<Writev>::operator()(int fd, const struct iovec *iovs, int iovc, ssize_t *bytes_written) {
+	auto r = sc(belka::SYS_writev, fd, iovs, iovc);
+	if (r.error)
+		return r.error;
+	*bytes_written = r.value;
+	return 0;
+}
+
+int Sysdeps<Fsync>::operator()(int fd) {
+	return sc(belka::SYS_fsync, fd).error;
+}
+
+int Sysdeps<Chmod>::operator()(const char *pathname, mode_t mode) {
+	return sc(belka::SYS_chmod, pathname, mode).error;
+}
+
+int Sysdeps<Fchmod>::operator()(int fd, mode_t mode) {
+	return sc(belka::SYS_fchmod, fd, mode).error;
+}
+
 int Sysdeps<Close>::operator()(int fd) {
 	return sc(belka::SYS_close, fd).error;
 }
@@ -375,29 +434,49 @@ void Sysdeps<Sync>::operator()() {
 	sc(belka::SYS_sync);
 }
 
-/*
- * Every clock reads the time of day, which gettimeofday() gives to the
- * microsecond; there is no separate monotonic clock yet.
- */
+/* The clocks come from clock_gettime() and clock_getres() (210, 211). */
 int Sysdeps<ClockGet>::operator()(int clock, time_t *secs, long *nanos) {
-	switch (clock) {
-	case CLOCK_REALTIME:
-	case CLOCK_MONOTONIC:
-	case CLOCK_MONOTONIC_RAW:
-	case CLOCK_REALTIME_COARSE:
-	case CLOCK_MONOTONIC_COARSE:
-	case CLOCK_BOOTTIME:
-		break;
+	struct timespec ts;
+	auto r = sc(belka::SYS_clock_gettime, clock, &ts);
+	if (r.error)
+		return r.error;
+	*secs = ts.tv_sec;
+	*nanos = ts.tv_nsec;
+	return 0;
+}
+
+int Sysdeps<ClockGetres>::operator()(int clock, time_t *secs, long *nanos) {
+	struct timespec ts;
+	auto r = sc(belka::SYS_clock_getres, clock, &ts);
+	if (r.error)
+		return r.error;
+	*secs = ts.tv_sec;
+	*nanos = ts.tv_nsec;
+	return 0;
+}
+
+/* times() returns the ticks since boot; struct tms has the same layout. */
+int Sysdeps<Times>::operator()(struct tms *tms, clock_t *out) {
+	auto r = sc(belka::SYS_times, tms);
+	if (r.error)
+		return r.error;
+	*out = static_cast<clock_t>(r.value);
+	return 0;
+}
+
+void Sysdeps<Yield>::operator()() {
+	sc(belka::SYS_yield);
+}
+
+/* The clock tick, which times() counts in; the rest is mlibc's to answer. */
+int Sysdeps<Sysconf>::operator()(int num, long *ret) {
+	switch (num) {
+	case _SC_CLK_TCK:
+		*ret = 100;
+		return 0;
 	default:
 		return EINVAL;
 	}
-	int64_t tv[2];
-	auto r = sc(belka::SYS_gettimeofday, tv);
-	if (r.error)
-		return r.error;
-	*secs = tv[0];
-	*nanos = tv[1] * 1000;
-	return 0;
 }
 
 int Sysdeps<Uname>::operator()(struct utsname *buf) {
