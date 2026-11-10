@@ -233,7 +233,11 @@ if default_library_paths.length() == 0
 	endif
 endif
 
-internal_conf.set_quoted('MLIBC_SYSTEM_NAME', host_machine.system())
+# The system whose sysdeps are built: host_machine.system(), unless the
+# sysdeps option names one (muon accepts only systems it knows).
+sysdeps_system = get_option('sysdeps') != '' ? get_option('sysdeps') : host_machine.system()
+
+internal_conf.set_quoted('MLIBC_SYSTEM_NAME', sysdeps_system)
 internal_conf.set_quoted('MLIBC_DEFAULT_LIBRARY_PATHS', '\\n'.join(default_library_paths))
 internal_conf.set('MLIBC_NUM_DEFAULT_LIBRARY_PATHS', default_library_paths.length())
 internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', false)
@@ -251,7 +255,7 @@ libc_include_dirs += include_directories('sysdeps/generic-helpers/include')
 
 # Process sysdeps first, as sysdeps might want to disable unsupported options.
 provides_bits_syscall_h = false
-if host_machine.system() == 'linux'
+if sysdeps_system == 'linux'
 	provides_bits_syscall_h = true
 	rtld_include_dirs += include_directories('sysdeps/linux/include')
 	libc_include_dirs += include_directories('sysdeps/linux/include')
@@ -273,7 +277,7 @@ if host_machine.system() == 'linux'
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/linux')
-elif host_machine.system() == 'managarm'
+elif sysdeps_system == 'managarm'
 	# TODO: Adopt the include_directories() commands from the managarm meson.build.
 	rtld_include_dirs += include_directories('sysdeps/managarm/include')
 	libc_include_dirs += include_directories('sysdeps/managarm/include')
@@ -281,53 +285,53 @@ elif host_machine.system() == 'managarm'
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/managarm')
-elif host_machine.system() == 'ironclad'
+elif sysdeps_system == 'ironclad'
 	rtld_include_dirs += include_directories('sysdeps/ironclad/include')
 	libc_include_dirs += include_directories('sysdeps/ironclad/include')
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	subdir('sysdeps/ironclad')
-elif host_machine.system() == 'keyronex'
+elif sysdeps_system == 'keyronex'
 	rtld_include_dirs += include_directories('sysdeps/keyronex/include')
 	libc_include_dirs += include_directories('sysdeps/keyronex/include')
 	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/keyronex')
-elif host_machine.system() == 'astral'
+elif sysdeps_system == 'astral'
 	rtld_include_dirs += include_directories('sysdeps/astral/include')
 	libc_include_dirs += include_directories('sysdeps/astral/include')
 	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	subdir('sysdeps/astral')
-elif host_machine.system() == 'obos'
+elif sysdeps_system == 'obos'
 	rtld_include_dirs += include_directories('sysdeps/obos/include')
 	libc_include_dirs += include_directories('sysdeps/obos/include')
 	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	subdir('sysdeps/obos')
-elif host_machine.system() == 'zinnia'
+elif sysdeps_system == 'zinnia'
 	rtld_include_dirs += include_directories('sysdeps/zinnia/include')
 	libc_include_dirs += include_directories('sysdeps/zinnia/include')
 	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/zinnia')
-elif host_machine.system() == 'ethereal'
+elif sysdeps_system == 'ethereal'
 	rtld_include_dirs += include_directories('sysdeps/ethereal/include')
 	libc_include_dirs += include_directories('sysdeps/ethereal/include')
 	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
 	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', false)
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/ethereal')
-elif host_machine.system() == 'belka'
+elif sysdeps_system == 'belka'
 	subdir('sysdeps/belka')
 # ANCHOR: demo-sysdeps
-elif host_machine.system() == 'demo'
+elif sysdeps_system == 'demo'
 	subdir('sysdeps/demo')
 # ANCHOR_END: demo-sysdeps
 else
-	error('No sysdeps defined for OS: ' + host_machine.system())
+	error('No sysdeps defined for OS: ' + sysdeps_system)
 endif
 
 #----------------------------------------------------------------------------------------
