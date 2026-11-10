@@ -396,6 +396,8 @@ enum {
 	PT_GNU_STACK = 0x6474E551,
 	PT_GNU_RELRO = 0x6474E552,
 	PT_GNU_PROPERTY = 0x6474E553,
+	PT_SUNW_UNWIND = 0x6464E550,
+	PT_SUNW_EH_FRAME = 0x6464E550,
 	PT_SUNWBSS = 0x6ffffffa,
 	PT_SUNWSTACK = 0x6ffffffb,
 	PT_HISUNW = 0x6fffffff,
@@ -473,6 +475,9 @@ enum {
 	DT_RELRENT = 37,
 	DT_LOOS = 0x6000000d,
 	DT_HIOS = 0x6ffff000,
+	DT_VALRNGLO = 0x6ffffd00,
+	DT_CHECKSUM = 0x6ffffdf8,
+	DT_VALRNGHI = 0x6ffffdff,
 	DT_GNU_HASH = 0x6ffffef5,
 	DT_TLSDESC_PLT = 0x6ffffef6,
 	DT_TLSDESC_GOT = 0x6ffffef7,
@@ -490,6 +495,7 @@ enum {
 
 enum {
 	/* For DT_FLAGS. */
+	DF_ORIGIN = 0x01,
 	DF_SYMBOLIC = 0x02,
 	DF_TEXTREL = 0x04,
 	DF_BIND_NOW = 0x08,
@@ -498,6 +504,7 @@ enum {
 	/* For DT_FLAGS_1. */
 	DF_1_NOW = 0x00000001,
 	DF_1_NODELETE = 0x00000008,
+	DF_1_ORIGIN = 0x00000080,
 	DF_1_PIE = 0x08000000
 };
 

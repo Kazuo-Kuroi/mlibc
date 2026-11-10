@@ -759,7 +759,10 @@ frg::expected<LinkerError, void> ObjectRepository::_fetchFromFile(SharedObject *
 				|| phdr->p_type == PT_GNU_EH_FRAME
 				|| phdr->p_type == PT_GNU_RELRO
 				|| phdr->p_type == PT_GNU_STACK
-				|| phdr->p_type == PT_GNU_PROPERTY) {
+				|| phdr->p_type == PT_GNU_PROPERTY
+				// The illumos link-editor's .eh_frame_hdr and stack segments.
+				|| phdr->p_type == PT_SUNW_UNWIND
+				|| phdr->p_type == PT_SUNWSTACK) {
 			// ignore the phdr
 		}else{
 			mlibc::panicLogger() << "Unexpected PHDR type 0x"
@@ -844,7 +847,8 @@ void ObjectRepository::_parseDynamic(SharedObject *object) {
 			if(dynamic->d_un.d_val & DF_BIND_NOW)
 				object->eagerBinding = true;
 
-			auto ignored = DF_BIND_NOW | DF_SYMBOLIC | DF_STATIC_TLS;
+			// DF_ORIGIN: $ORIGIN is always expanded.
+			auto ignored = DF_BIND_NOW | DF_SYMBOLIC | DF_STATIC_TLS | DF_ORIGIN;
 #ifdef __riscv
 			// Work around https://sourceware.org/bugzilla/show_bug.cgi?id=24673.
 			ignored |= DF_TEXTREL;
@@ -863,7 +867,8 @@ void ObjectRepository::_parseDynamic(SharedObject *object) {
 			// The DF_1_PIE flag is informational only. It is used by e.g file(1).
 			// The DF_1_NODELETE flag has a similar effect to RTLD_NODELETE, both of which we
 			// ignore because we don't implement dlclose().
-			if(dynamic->d_un.d_val & ~(DF_1_NOW | DF_1_PIE | DF_1_NODELETE))
+			// DF_1_ORIGIN: $ORIGIN is always expanded.
+			if(dynamic->d_un.d_val & ~(DF_1_NOW | DF_1_PIE | DF_1_NODELETE | DF_1_ORIGIN))
 				mlibc::infoLogger() << "\e[31mrtld: DT_FLAGS_1(" << frg::hex_fmt{dynamic->d_un.d_val}
 						<< ") is not implemented correctly!\e[39m"
 						<< frg::endlog;
@@ -950,8 +955,11 @@ void ObjectRepository::_parseDynamic(SharedObject *object) {
 		case DT_TLSDESC_PLT: case DT_TLSDESC_GOT:
 			break;
 		default:
-			// Ignore unknown entries in the os-specific area as we don't use them.
+			// Ignore unknown entries in the os-specific area as we don't use them,
+			// and those of the value range (DT_CHECKSUM and the like), which
+			// hold no addresses: Solaris-style link-editors write some.
 			if((dynamic->d_tag < DT_LOOS || dynamic->d_tag > DT_HIOS)
+			&& (dynamic->d_tag < DT_VALRNGLO || dynamic->d_tag > DT_VALRNGHI)
 			&& (dynamic->d_tag < DT_LOPROC || dynamic->d_tag > DT_HIPROC)) {
 				mlibc::panicLogger() << "Unexpected dynamic entry "
 					<< (void *)dynamic->d_tag << " in object" << frg::endlog;
@@ -2117,7 +2125,12 @@ void Loader::_processRelocations(Relocation &rel) {
 	if(rel.symbol_index()) {
 		auto [sym, ver] = rel.object()->getSymbolByIndex(rel.symbol_index());
 
-		if (rel.object()->symbolicResolution)
+		// A local symbol is the object's own: the illumos link-editor gives
+		// TLS module relocations the TLS section's symbol, not symbol 0.
+		if (ELF_ST_BIND(sym.symbol()->st_info) == STB_LOCAL)
+			p = sym;
+
+		if (!p && rel.object()->symbolicResolution)
 			p = resolveInObject(rel.object(), sym.getString(), ver);
 
 		if (!p)
@@ -2184,6 +2197,8 @@ void Loader::_processRelocations(Relocation &rel) {
 	case R_TLS_DTPREL: {
 		__ensure(rel.symbol_index());
 		__ensure(p);
+		// A section symbol's value is an address, not a TLS offset.
+		__ensure(ELF_ST_TYPE(p->symbol()->st_info) != STT_SECTION);
 		rel.relocate(p->symbol()->st_value + rel.addend_rel() - TLS_DTV_OFFSET);
 	} break;
 	case R_TLS_TPREL: {
@@ -2192,6 +2207,7 @@ void Loader::_processRelocations(Relocation &rel) {
 
 		if(rel.symbol_index()) {
 			__ensure(p);
+			__ensure(ELF_ST_TYPE(p->symbol()->st_info) != STT_SECTION);
 			if(p->object()->tlsModel != TlsModel::initial)
 				mlibc::panicLogger() << "rtld: In object " << rel.object()->name
 						<< ": Static TLS relocation to symbol " << p->getString()

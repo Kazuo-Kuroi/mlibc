@@ -1,4 +1,4 @@
-/* Start-up for static programs: __mlibc_entry(entry stack, main). */
+/* Start-up for programs, static or dynamic: __mlibc_entry(entry stack, main). */
 	.section .text
 	.global _start
 	.type _start, @function

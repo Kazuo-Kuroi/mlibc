@@ -440,6 +440,11 @@ extern "C" void *interpreterMain(uintptr_t *entry_stack) {
 			break;
 		}
 		default:
+			// OS-specific entries and those of the value range (as
+			// DT_CHECKSUM) need nothing of the program interpreter.
+			if((ent->d_tag >= DT_LOOS && ent->d_tag <= DT_HIOS)
+					|| (ent->d_tag >= DT_VALRNGLO && ent->d_tag <= DT_VALRNGHI))
+				continue;
 			mlibc::panicLogger() << "rtld: unexpected dynamic entry " << ent->d_tag << " in program interpreter" << frg::endlog;
 		}
 	}
@@ -647,7 +652,11 @@ extern "C" void *interpreterMain(uintptr_t *entry_stack) {
 		frg::string<MemoryAllocator> { getAllocator() },
 		ldso_base, _DYNAMIC, 1);
 
-	auto ldso_ehdr = reinterpret_cast<elf_ehdr *>(__ehdr_start);
+	// __ehdr_start is GNU ld's; other link-editors (the illumos one) leave it
+	// undefined. The header is also at the base address, mapped there with
+	// the first segment.
+	auto ldso_ehdr = __ehdr_start ? reinterpret_cast<elf_ehdr *>(__ehdr_start)
+			: reinterpret_cast<elf_ehdr *>(ldso_base);
 	auto ldso_phdr = reinterpret_cast<elf_phdr *>(ldso_base + ldso_ehdr->e_phoff);
 
 	ldso->phdrPointer = ldso_phdr;
