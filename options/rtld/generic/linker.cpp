@@ -760,7 +760,7 @@ frg::expected<LinkerError, void> ObjectRepository::_fetchFromFile(SharedObject *
 				|| phdr->p_type == PT_GNU_RELRO
 				|| phdr->p_type == PT_GNU_STACK
 				|| phdr->p_type == PT_GNU_PROPERTY
-				// The illumos link-editor's .eh_frame_hdr and stack segments.
+				// Older illumos link-editors' .eh_frame_hdr, and their stack.
 				|| phdr->p_type == PT_SUNW_UNWIND
 				|| phdr->p_type == PT_SUNWSTACK) {
 			// ignore the phdr
