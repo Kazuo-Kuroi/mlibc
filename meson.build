@@ -325,6 +325,10 @@ elif sysdeps_system == 'ethereal'
 	internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', true)
 	subdir('sysdeps/ethereal')
 elif sysdeps_system == 'belka'
+	# The runtime linker maps objects' segments from their files, in a
+	# range the kernel chooses.
+	internal_conf.set10('MLIBC_MAP_DSO_SEGMENTS', true)
+	internal_conf.set10('MLIBC_MMAP_ALLOCATE_DSO', true)
 	subdir('sysdeps/belka')
 # ANCHOR: demo-sysdeps
 elif sysdeps_system == 'demo'
