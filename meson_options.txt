@@ -19,5 +19,7 @@ option('use_freestnd_hdrs', type : 'feature', value : 'auto',
 	description : 'Use freestnd-c{,xx}-hdrs instead of looking for compiler headers')
 option('ld_library_name', type: 'string', value: 'ld',
 	description: 'Name of the ld library to build. Defaults to "ld".')
+option('soversion', type: 'string', value: '',
+	description: 'The version of the shared ld and libc (libc.so.N), or none.')
 option('sysdeps', type : 'string', value : '',
 	description : 'The system to build sysdeps for, if not host_machine.system(), for meson implementations (such as muon) that only accept known system names in a cross file')

@@ -676,7 +676,13 @@ if not headers_only
 		)
 	endif
 	if library_type in ['shared', 'both']
+		# A version makes ld.so.N and libc.so.N, with libc.so for linking.
+		so_kwargs = {}
+		if get_option('soversion') != ''
+			so_kwargs = {'soversion': get_option('soversion')}
+		endif
 		ld_shared_lib = shared_library(ld_library_name, rtld_sources + rtld_dso_sources,
+			kwargs: so_kwargs,
 			name_prefix: '',
 			cpp_args: mlibc_c_args + ld_cpp_args,
 			link_args: mlibc_link_args,
@@ -687,6 +693,7 @@ if not headers_only
 		hide_everything_ld = (meson.current_source_dir()
 				      / 'scripts/hide-everything.ld')
 		libc_shared = shared_library('c', libc_all_sources,
+			kwargs: so_kwargs,
 			c_args: [mlibc_c_args],
 			cpp_args: [libc_cpp_args],
 			include_directories: libc_include_dirs,
