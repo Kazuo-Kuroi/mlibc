@@ -47,6 +47,7 @@ struct BelkaSysdepTags :
 	Mkdir,
 	Mkfifoat,
 	Mknodat,
+	Fchownat,
 	Rmdir,
 	Unlinkat,
 	Rename,

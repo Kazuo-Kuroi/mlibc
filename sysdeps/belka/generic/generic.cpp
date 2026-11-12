@@ -409,6 +409,20 @@ int Sysdeps<Mkfifoat>::operator()(int dirfd, const char *path, mode_t mode) {
 	return sysdep<Mknodat>(dirfd, path, S_IFIFO | (mode & 07777), 0);
 }
 
+/*
+ * chown, lchown (AT_SYMLINK_NOFOLLOW), and fchown (an empty path with
+ * AT_EMPTY_PATH). An id of -1 leaves that id as it is.
+ */
+int Sysdeps<Fchownat>::operator()(int dirfd, const char *path, uid_t owner, gid_t group, int flags) {
+	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
+		return EINVAL;
+	if ((flags & AT_EMPTY_PATH) && path && !path[0])
+		return sc(belka::SYS_fchown, dirfd, owner, group).error;
+	if (!at_cwd(dirfd, path))
+		return ENOSYS;
+	return sc((flags & AT_SYMLINK_NOFOLLOW) ? belka::SYS_lchown : belka::SYS_chown, path, owner, group).error;
+}
+
 int Sysdeps<Rmdir>::operator()(const char *path) {
 	return sc(belka::SYS_rmdir, path).error;
 }
