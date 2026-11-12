@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/resource.h>
 #include <sys/utsname.h>
 #include <sys/times.h>
 #include <sys/uio.h>
@@ -572,6 +573,14 @@ int Sysdeps<ClockGetres>::operator()(int clock, time_t *secs, long *nanos) {
 }
 
 /* times() returns the ticks since boot; struct tms has the same layout. */
+int Sysdeps<GetRlimit>::operator()(int resource, struct rlimit *limit) {
+	return sc(belka::SYS_getrlimit, resource, limit).error;
+}
+
+int Sysdeps<SetRlimit>::operator()(int resource, const struct rlimit *limit) {
+	return sc(belka::SYS_setrlimit, resource, limit).error;
+}
+
 int Sysdeps<Times>::operator()(struct tms *tms, clock_t *out) {
 	auto r = sc(belka::SYS_times, tms);
 	if (r.error)

@@ -74,6 +74,8 @@ enum : long {
 	SYS_fchdir = 120,
 	SYS_readv = 121,
 	SYS_writev = 122,
+	SYS_setrlimit = 128,
+	SYS_getrlimit = 129,
 	SYS_lchown = 130,
 	SYS_rename = 134,
 	SYS_uname = 135,

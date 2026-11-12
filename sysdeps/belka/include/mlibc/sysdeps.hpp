@@ -58,6 +58,8 @@ struct BelkaSysdepTags :
 	ClockGet,
 	ClockGetres,
 	Times,
+	GetRlimit,
+	SetRlimit,
 	Yield,
 	Sysconf,
 	Pipe,
