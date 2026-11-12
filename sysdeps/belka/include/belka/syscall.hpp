@@ -55,6 +55,7 @@ enum : long {
 	SYS_rmdir = 79,
 	SYS_mkdir = 80,
 	SYS_getdents = 81,
+	SYS_poll = 87,
 	SYS_lstat = 88,
 	SYS_symlink = 89,
 	SYS_readlink = 90,

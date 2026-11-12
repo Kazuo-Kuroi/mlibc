@@ -31,13 +31,13 @@ libc_sources += files(
 # that every meson implementation installs the header itself: muon
 # copies a link as a link.
 abi_belka_headers = [
-	'errno', 'fcntl', 'nlink_t', 'seek-whence', 'signal', 'sigset_t',
-	'stat', 'utsname', 'vm-flags', 'wait',
+	'errno', 'fcntl', 'nlink_t', 'poll', 'seek-whence', 'signal',
+	'sigset_t', 'stat', 'utsname', 'vm-flags', 'wait',
 ]
 abi_linux_headers = [
 	'access', 'aio', 'auxv', 'blkcnt_t', 'blksize_t', 'clockid_t',
 	'dev_t', 'fd_set', 'fsblkcnt_t', 'fsfilcnt_t', 'gid_t', 'in', 'ino_t',
-	'ioctls', 'ipc', 'limits', 'mode_t', 'mqueue', 'msg', 'pid_t', 'poll',
+	'ioctls', 'ipc', 'limits', 'mode_t', 'mqueue', 'msg', 'pid_t',
 	'resource', 'riscv-hwprobe', 'rlim_t', 'route', 'sa_family_t',
 	'sched_param', 'sem', 'shm', 'sig-limits', 'sigevent', 'sigval',
 	'sockaddr_storage', 'socket', 'socklen_t', 'statvfs', 'suseconds_t',

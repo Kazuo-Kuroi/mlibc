@@ -6,10 +6,12 @@
 #include <bits/ensure.h>
 #include <dirent.h>
 #include <limits.h>
+#include <poll.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/utsname.h>
 #include <sys/times.h>
 #include <sys/uio.h>
@@ -37,6 +39,23 @@ int set_cloexec(int fd) {
 /* Paths relative to a directory descriptor other than the current directory are not supported yet. */
 bool at_cwd(int dirfd, const char *path) {
 	return dirfd == AT_FDCWD || (path && path[0] == '/');
+}
+
+/*
+ * fd_set bits, here rather than through FD_SET and friends, which are
+ * libc functions that ld.so does not have. The mask words begin the
+ * structure, whatever their member is called.
+ */
+__fd_mask *fd_words(fd_set *set) {
+	return reinterpret_cast<__fd_mask *>(set);
+}
+
+bool fd_isset(int fd, fd_set *set) {
+	return fd_words(set)[fd / __NFDBITS] & (__fd_mask{1} << (fd % __NFDBITS));
+}
+
+void fd_set_bit(int fd, fd_set *set) {
+	fd_words(set)[fd / __NFDBITS] |= __fd_mask{1} << (fd % __NFDBITS);
 }
 
 /* The kernel's directory entry: d_ino, d_off, d_reclen, then the name. */
@@ -233,6 +252,78 @@ int Sysdeps<Seek>::operator()(int fd, off_t offset, int whence, off_t *new_offse
 }
 
 /* pipe() returns the read end in %rax and the write end in %rdx. */
+int Sysdeps<Poll>::operator()(struct pollfd *fds, nfds_t count, int timeout, int *num_events) {
+	auto r = sc(belka::SYS_poll, fds, count, timeout);
+	if (r.error)
+		return r.error;
+	*num_events = static_cast<int>(r.value);
+	return 0;
+}
+
+/*
+ * select() through poll(): readable is POLLIN or a hang-up or error,
+ * writable POLLOUT or an error, and exceptional POLLPRI. A signal mask
+ * cannot be swapped atomically from here, so pselect() with one is not
+ * supported yet.
+ */
+int Sysdeps<Pselect>::operator()(int num_fds, fd_set *read_set, fd_set *write_set, fd_set *except_set,
+		const struct timespec *timeout, const sigset_t *sigmask, int *num_events) {
+	struct pollfd fds[FD_SETSIZE];
+	int n = 0, ms = -1;
+
+	if (sigmask)
+		return ENOSYS;
+	if (num_fds < 0 || num_fds > FD_SETSIZE)
+		return EINVAL;
+	if (timeout) {
+		if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000)
+			return EINVAL;
+		long long t = timeout->tv_sec * 1000LL + (timeout->tv_nsec + 999999) / 1000000;
+		ms = t > INT_MAX ? INT_MAX : static_cast<int>(t);
+	}
+	for (int fd = 0; fd < num_fds; fd++) {
+		short ev = 0;
+		if (read_set && fd_isset(fd, read_set))
+			ev |= POLLIN;
+		if (write_set && fd_isset(fd, write_set))
+			ev |= POLLOUT;
+		if (except_set && fd_isset(fd, except_set))
+			ev |= POLLPRI;
+		if (ev)
+			fds[n++] = {fd, ev, 0};
+	}
+	auto r = sc(belka::SYS_poll, fds, n, ms);
+	if (r.error)
+		return r.error;
+	for (int i = 0; i < n; i++)
+		if (fds[i].revents & POLLNVAL)
+			return EBADF;
+	if (read_set)
+		memset(read_set, 0, sizeof(fd_set));
+	if (write_set)
+		memset(write_set, 0, sizeof(fd_set));
+	if (except_set)
+		memset(except_set, 0, sizeof(fd_set));
+	int count = 0;
+	for (int i = 0; i < n; i++) {
+		short rev = fds[i].revents;
+		if (read_set && (fds[i].events & POLLIN) && (rev & (POLLIN | POLLHUP | POLLERR))) {
+			fd_set_bit(fds[i].fd, read_set);
+			count++;
+		}
+		if (write_set && (fds[i].events & POLLOUT) && (rev & (POLLOUT | POLLERR))) {
+			fd_set_bit(fds[i].fd, write_set);
+			count++;
+		}
+		if (except_set && (fds[i].events & POLLPRI) && (rev & POLLPRI)) {
+			fd_set_bit(fds[i].fd, except_set);
+			count++;
+		}
+	}
+	*num_events = count;
+	return 0;
+}
+
 int Sysdeps<Pipe>::operator()(int *fds, int flags) {
 	if (flags & ~(O_CLOEXEC | O_NONBLOCK))
 		return EINVAL;

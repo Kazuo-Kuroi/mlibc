@@ -61,6 +61,8 @@ struct BelkaSysdepTags :
 	Yield,
 	Sysconf,
 	Pipe,
+	Poll,
+	Pselect,
 	Readv,
 	Writev,
 	Fsync,
