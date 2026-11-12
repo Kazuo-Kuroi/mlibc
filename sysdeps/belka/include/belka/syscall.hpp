@@ -27,6 +27,7 @@ enum : long {
 	SYS_exec = 11,
 	SYS_chdir = 12,
 	SYS_time = 13,
+	SYS_mknod = 14,
 	SYS_chmod = 15,
 	SYS_brk = 17,
 	SYS_stat = 18,

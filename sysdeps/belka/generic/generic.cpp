@@ -398,6 +398,17 @@ int Sysdeps<Mkdir>::operator()(const char *path, mode_t mode) {
 	return sc(belka::SYS_mkdir, path, mode).error;
 }
 
+int Sysdeps<Mknodat>::operator()(int dirfd, const char *path, int mode, int dev) {
+	if (!at_cwd(dirfd, path))
+		return ENOSYS;
+	return sc(belka::SYS_mknod, path, mode, dev).error;
+}
+
+/* A FIFO is a node made with mknod, as in System V. */
+int Sysdeps<Mkfifoat>::operator()(int dirfd, const char *path, mode_t mode) {
+	return sysdep<Mknodat>(dirfd, path, S_IFIFO | (mode & 07777), 0);
+}
+
 int Sysdeps<Rmdir>::operator()(const char *path) {
 	return sc(belka::SYS_rmdir, path).error;
 }
