@@ -58,7 +58,7 @@
 
 #define FD_CLOEXEC 1
 
-/* For the *at() calls, which the C library carries out itself for now. */
+/* For the *at() calls: the kernel's values (<sys/fcntl.h>), but AT_EMPTY_PATH is the C library's own. */
 #define AT_FDCWD -100
 #define AT_SYMLINK_NOFOLLOW 0x1000
 #define AT_REMOVEDIR 0x1

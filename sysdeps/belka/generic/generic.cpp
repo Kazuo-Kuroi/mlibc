@@ -37,11 +37,6 @@ int set_cloexec(int fd) {
 	return sc(belka::SYS_fcntl, fd, F_SETFD, FD_CLOEXEC).error;
 }
 
-/* Paths relative to a directory descriptor other than the current directory are not supported yet. */
-bool at_cwd(int dirfd, const char *path) {
-	return dirfd == AT_FDCWD || (path && path[0] == '/');
-}
-
 /*
  * fd_set bits, here rather than through FD_SET and friends, which are
  * libc functions that ld.so does not have. The mask words begin the
@@ -136,13 +131,17 @@ int Sysdeps<VmProtect>::operator()(void *pointer, size_t size, int prot) {
 }
 
 int Sysdeps<Open>::operator()(const char *pathname, int flags, mode_t mode, int *fd) {
+	return sysdep<Openat>(AT_FDCWD, pathname, flags, mode, fd);
+}
+
+int Sysdeps<Openat>::operator()(int dirfd, const char *pathname, int flags, mode_t mode, int *fd) {
 	if (flags & O_NOFOLLOW) {
 		struct stat st;
-		auto r = sc(belka::SYS_lstat, pathname, &st);
+		auto r = sc(belka::SYS_fstatat, dirfd, pathname, &st, AT_SYMLINK_NOFOLLOW);
 		if (!r.error && S_ISLNK(st.st_mode))
 			return ELOOP;
 	}
-	auto r = sc(belka::SYS_open, pathname, flags & ~libc_open_flags, mode);
+	auto r = sc(belka::SYS_openat, dirfd, pathname, flags & ~libc_open_flags, mode);
 	if (r.error)
 		return r.error;
 	int nfd = static_cast<int>(r.value);
@@ -163,12 +162,6 @@ int Sysdeps<Open>::operator()(const char *pathname, int flags, mode_t mode, int 
 	}
 	*fd = nfd;
 	return 0;
-}
-
-int Sysdeps<Openat>::operator()(int dirfd, const char *path, int flags, mode_t mode, int *fd) {
-	if (!at_cwd(dirfd, path))
-		return ENOSYS;
-	return sysdep<Open>(path, flags, mode, fd);
 }
 
 int Sysdeps<OpenDir>::operator()(const char *path, int *handle) {
@@ -380,6 +373,10 @@ int Sysdeps<Fchmod>::operator()(int fd, mode_t mode) {
 	return sc(belka::SYS_fchmod, fd, mode).error;
 }
 
+int Sysdeps<Fchmodat>::operator()(int fd, const char *pathname, mode_t mode, int flags) {
+	return sc(belka::SYS_fchmodat, fd, pathname, mode, flags).error;
+}
+
 int Sysdeps<Close>::operator()(int fd) {
 	return sc(belka::SYS_close, fd).error;
 }
@@ -450,13 +447,11 @@ int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int f
 	switch (fsfdt) {
 	case fsfd_target::fd:
 		return sc(belka::SYS_fstat, fd, statbuf).error;
-	case fsfd_target::fd_path:
-		if (!at_cwd(fd, path))
-			return ENOSYS;
-		[[fallthrough]];
 	case fsfd_target::path:
-		return sc((flags & AT_SYMLINK_NOFOLLOW) ? belka::SYS_lstat : belka::SYS_stat,
-				path, statbuf).error;
+		fd = AT_FDCWD;
+		[[fallthrough]];
+	case fsfd_target::fd_path:
+		return sc(belka::SYS_fstatat, fd, path, statbuf, flags & AT_SYMLINK_NOFOLLOW).error;
 	default:
 		return EINVAL;
 	}
@@ -466,8 +461,16 @@ int Sysdeps<Access>::operator()(const char *path, int mode) {
 	return sc(belka::SYS_access, path, mode).error;
 }
 
+int Sysdeps<Faccessat>::operator()(int dirfd, const char *pathname, int mode, int flags) {
+	return sc(belka::SYS_faccessat, dirfd, pathname, mode, flags).error;
+}
+
 int Sysdeps<Readlink>::operator()(const char *path, void *buffer, size_t max_size, ssize_t *length) {
-	auto r = sc(belka::SYS_readlink, path, buffer, max_size);
+	return sysdep<Readlinkat>(AT_FDCWD, path, buffer, max_size, length);
+}
+
+int Sysdeps<Readlinkat>::operator()(int dirfd, const char *path, void *buffer, size_t max_size, ssize_t *length) {
+	auto r = sc(belka::SYS_readlinkat, dirfd, path, buffer, max_size);
 	if (r.error)
 		return r.error;
 	*length = r.value;
@@ -490,10 +493,12 @@ int Sysdeps<Mkdir>::operator()(const char *path, mode_t mode) {
 	return sc(belka::SYS_mkdir, path, mode).error;
 }
 
+int Sysdeps<Mkdirat>::operator()(int dirfd, const char *path, mode_t mode) {
+	return sc(belka::SYS_mkdirat, dirfd, path, mode).error;
+}
+
 int Sysdeps<Mknodat>::operator()(int dirfd, const char *path, int mode, int dev) {
-	if (!at_cwd(dirfd, path))
-		return ENOSYS;
-	return sc(belka::SYS_mknod, path, mode, dev).error;
+	return sc(belka::SYS_mknodat, dirfd, path, mode, dev).error;
 }
 
 /* A FIFO is a node made with mknod, as in System V. */
@@ -510,9 +515,7 @@ int Sysdeps<Fchownat>::operator()(int dirfd, const char *path, uid_t owner, gid_
 		return EINVAL;
 	if ((flags & AT_EMPTY_PATH) && path && !path[0])
 		return sc(belka::SYS_fchown, dirfd, owner, group).error;
-	if (!at_cwd(dirfd, path))
-		return ENOSYS;
-	return sc((flags & AT_SYMLINK_NOFOLLOW) ? belka::SYS_lchown : belka::SYS_chown, path, owner, group).error;
+	return sc(belka::SYS_fchownat, dirfd, path, owner, group, flags & AT_SYMLINK_NOFOLLOW).error;
 }
 
 int Sysdeps<Rmdir>::operator()(const char *path) {
@@ -520,23 +523,31 @@ int Sysdeps<Rmdir>::operator()(const char *path) {
 }
 
 int Sysdeps<Unlinkat>::operator()(int dirfd, const char *path, int flags) {
-	if (flags & ~AT_REMOVEDIR)
-		return EINVAL;
-	if (!at_cwd(dirfd, path))
-		return ENOSYS;
-	return sc((flags & AT_REMOVEDIR) ? belka::SYS_rmdir : belka::SYS_unlink, path).error;
+	return sc(belka::SYS_unlinkat, dirfd, path, flags).error;
 }
 
 int Sysdeps<Rename>::operator()(const char *path, const char *new_path) {
 	return sc(belka::SYS_rename, path, new_path).error;
 }
 
+int Sysdeps<Renameat>::operator()(int olddirfd, const char *old_path, int newdirfd, const char *new_path) {
+	return sc(belka::SYS_renameat, olddirfd, old_path, newdirfd, new_path).error;
+}
+
 int Sysdeps<Link>::operator()(const char *old_path, const char *new_path) {
 	return sc(belka::SYS_link, old_path, new_path).error;
 }
 
+int Sysdeps<Linkat>::operator()(int olddirfd, const char *old_path, int newdirfd, const char *new_path, int flags) {
+	return sc(belka::SYS_linkat, olddirfd, old_path, newdirfd, new_path, flags).error;
+}
+
 int Sysdeps<Symlink>::operator()(const char *target_path, const char *link_path) {
 	return sc(belka::SYS_symlink, target_path, link_path).error;
+}
+
+int Sysdeps<Symlinkat>::operator()(const char *target_path, int dirfd, const char *link_path) {
+	return sc(belka::SYS_symlinkat, target_path, dirfd, link_path).error;
 }
 
 int Sysdeps<Umask>::operator()(mode_t mode, mode_t *old) {

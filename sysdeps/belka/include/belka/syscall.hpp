@@ -103,6 +103,18 @@ enum : long {
 	SYS_clock_gettime = 210,
 	SYS_clock_getres = 211,
 	SYS_yield = 212,
+	SYS_openat = 213,
+	SYS_mknodat = 214,
+	SYS_mkdirat = 215,
+	SYS_unlinkat = 216,
+	SYS_renameat = 217,
+	SYS_linkat = 218,
+	SYS_symlinkat = 219,
+	SYS_readlinkat = 220,
+	SYS_fstatat = 221,
+	SYS_fchownat = 222,
+	SYS_fchmodat = 223,
+	SYS_faccessat = 224,
 };
 
 /* context() commands. */
