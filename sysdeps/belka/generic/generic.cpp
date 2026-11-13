@@ -482,6 +482,18 @@ int Sysdeps<Ftruncate>::operator()(int fd, size_t size) {
 	return sc(belka::SYS_ftruncate, fd, size).error;
 }
 
+/* There is no truncate call: open for writing, which checks permission, and ftruncate. */
+int Sysdeps<Truncate>::operator()(const char *path, off_t length) {
+	if (length < 0)
+		return EINVAL;
+	int fd;
+	if (int e = sysdep<Open>(path, O_WRONLY | O_CLOEXEC, 0, &fd); e)
+		return e;
+	int e = sc(belka::SYS_ftruncate, fd, length).error;
+	sysdep<Close>(fd);
+	return e;
+}
+
 int Sysdeps<Chdir>::operator()(const char *path) {
 	return sc(belka::SYS_chdir, path).error;
 }
@@ -663,6 +675,35 @@ gid_t Sysdeps<GetGid>::operator()() {
 
 gid_t Sysdeps<GetEgid>::operator()() {
 	return static_cast<gid_t>(sc(belka::SYS_getgid).value2);
+}
+
+int Sysdeps<SetUid>::operator()(uid_t uid) {
+	return sc(belka::SYS_setuid, uid).error;
+}
+
+int Sysdeps<SetEuid>::operator()(uid_t euid) {
+	return sc(belka::SYS_seteuid, euid).error;
+}
+
+int Sysdeps<SetGid>::operator()(gid_t gid) {
+	return sc(belka::SYS_setgid, gid).error;
+}
+
+int Sysdeps<SetEgid>::operator()(gid_t egid) {
+	return sc(belka::SYS_setegid, egid).error;
+}
+
+/* getgroups(0, ...) returns the number of groups alone. */
+int Sysdeps<GetGroups>::operator()(size_t size, gid_t *list, int *ret) {
+	auto r = sc(belka::SYS_getgroups, size, list);
+	if (r.error)
+		return r.error;
+	*ret = static_cast<int>(r.value);
+	return 0;
+}
+
+int Sysdeps<SetGroups>::operator()(size_t size, const gid_t *list) {
+	return sc(belka::SYS_setgroups, size, list).error;
 }
 
 int Sysdeps<GetPgid>::operator()(pid_t pid, pid_t *pgid) {
