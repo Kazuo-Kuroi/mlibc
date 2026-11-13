@@ -115,6 +115,8 @@ enum : long {
 	SYS_fchownat = 222,
 	SYS_fchmodat = 223,
 	SYS_faccessat = 224,
+	SYS_pollsys = 225,
+	SYS_getrusage = 226,
 };
 
 /* context() commands. */

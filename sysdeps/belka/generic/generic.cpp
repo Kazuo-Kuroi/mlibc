@@ -254,27 +254,28 @@ int Sysdeps<Poll>::operator()(struct pollfd *fds, nfds_t count, int timeout, int
 	return 0;
 }
 
+/* ppoll(): poll with a timespec, and a signal mask held for the wait. */
+int Sysdeps<Ppoll>::operator()(struct pollfd *fds, nfds_t count, const struct timespec *ts,
+		const sigset_t *mask, int *num_events) {
+	auto r = sc(belka::SYS_pollsys, fds, count, ts, mask);
+	if (r.error)
+		return r.error;
+	*num_events = static_cast<int>(r.value);
+	return 0;
+}
+
 /*
- * select() through poll(): readable is POLLIN or a hang-up or error,
- * writable POLLOUT or an error, and exceptional POLLPRI. A signal mask
- * cannot be swapped atomically from here, so pselect() with one is not
- * supported yet.
+ * select() through pollsys: readable is POLLIN or a hang-up or error,
+ * writable POLLOUT or an error, and exceptional POLLPRI. The kernel
+ * takes the timeout as it is and holds any signal mask for the wait.
  */
 int Sysdeps<Pselect>::operator()(int num_fds, fd_set *read_set, fd_set *write_set, fd_set *except_set,
 		const struct timespec *timeout, const sigset_t *sigmask, int *num_events) {
 	struct pollfd fds[FD_SETSIZE];
-	int n = 0, ms = -1;
+	int n = 0;
 
-	if (sigmask)
-		return ENOSYS;
 	if (num_fds < 0 || num_fds > FD_SETSIZE)
 		return EINVAL;
-	if (timeout) {
-		if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000)
-			return EINVAL;
-		long long t = timeout->tv_sec * 1000LL + (timeout->tv_nsec + 999999) / 1000000;
-		ms = t > INT_MAX ? INT_MAX : static_cast<int>(t);
-	}
 	for (int fd = 0; fd < num_fds; fd++) {
 		short ev = 0;
 		if (read_set && fd_isset(fd, read_set))
@@ -286,7 +287,7 @@ int Sysdeps<Pselect>::operator()(int num_fds, fd_set *read_set, fd_set *write_se
 		if (ev)
 			fds[n++] = {fd, ev, 0};
 	}
-	auto r = sc(belka::SYS_poll, fds, n, ms);
+	auto r = sc(belka::SYS_pollsys, fds, n, timeout, sigmask);
 	if (r.error)
 		return r.error;
 	for (int i = 0; i < n; i++)
@@ -583,7 +584,6 @@ int Sysdeps<ClockGetres>::operator()(int clock, time_t *secs, long *nanos) {
 	return 0;
 }
 
-/* times() returns the ticks since boot; struct tms has the same layout. */
 int Sysdeps<GetRlimit>::operator()(int resource, struct rlimit *limit) {
 	return sc(belka::SYS_getrlimit, resource, limit).error;
 }
@@ -592,6 +592,12 @@ int Sysdeps<SetRlimit>::operator()(int resource, const struct rlimit *limit) {
 	return sc(belka::SYS_setrlimit, resource, limit).error;
 }
 
+/* The kernel's struct rusage has the C library's layout. */
+int Sysdeps<GetRusage>::operator()(int scope, struct rusage *usage) {
+	return sc(belka::SYS_getrusage, scope, usage).error;
+}
+
+/* times() returns the ticks since boot; struct tms has the same layout. */
 int Sysdeps<Times>::operator()(struct tms *tms, clock_t *out) {
 	auto r = sc(belka::SYS_times, tms);
 	if (r.error)
