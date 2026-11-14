@@ -83,6 +83,8 @@ struct BelkaSysdepTags :
 	GetRusage,
 	Yield,
 	Sysconf,
+	Socket,
+	MsgSend,
 	Pipe,
 	Poll,
 	Ppoll,

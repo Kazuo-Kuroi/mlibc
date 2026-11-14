@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <termios.h>
@@ -901,6 +902,19 @@ int Sysdeps<Kill>::operator()(pid_t pid, int sig) {
 
 int Sysdeps<Pause>::operator()() {
 	return sc(belka::SYS_pause).error;
+}
+
+/*
+ * There are no sockets yet. Saying so plainly keeps syslog(), which
+ * tries /dev/log first, quiet: it falls back as it does without a
+ * logging daemon.
+ */
+int Sysdeps<Socket>::operator()(int, int, int, int *) {
+	return EAFNOSUPPORT;
+}
+
+int Sysdeps<MsgSend>::operator()(int, const struct msghdr *, int, ssize_t *) {
+	return EBADF;
 }
 
 } // namespace mlibc

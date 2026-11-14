@@ -1,1 +1,1 @@
-../../../../abis/linux/sig-limits.h
+../../../../abis/belka/sig-limits.h
