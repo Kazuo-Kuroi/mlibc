@@ -681,23 +681,13 @@ int Sysdeps<GetRusage>::operator()(int scope, struct rusage *usage) {
 	return sc(belka::SYS_getrusage, scope, usage).error;
 }
 
-/*
- * There are no interval timers yet: ITIMER_REAL without an interval is
- * the alarm call, in whole seconds (rounded up), which is what alarm()
- * asks for. Anything else is EINVAL.
- */
+/* The kernel's struct itimerval has the C library's layout. */
 int Sysdeps<SetItimer>::operator()(int which, const struct itimerval *new_value, struct itimerval *old_value) {
-	if (which != ITIMER_REAL || new_value->it_interval.tv_sec != 0 || new_value->it_interval.tv_usec != 0)
-		return EINVAL;
-	unsigned long secs = new_value->it_value.tv_sec + (new_value->it_value.tv_usec != 0);
-	auto r = sc(belka::SYS_alarm, secs);
-	if (r.error)
-		return r.error;
-	if (old_value) {
-		memset(old_value, 0, sizeof(*old_value));
-		old_value->it_value.tv_sec = static_cast<time_t>(r.value);
-	}
-	return 0;
+	return sc(belka::SYS_setitimer, which, new_value, old_value).error;
+}
+
+int Sysdeps<GetItimer>::operator()(int which, struct itimerval *curr_value) {
+	return sc(belka::SYS_getitimer, which, curr_value).error;
 }
 
 /* times() returns the ticks since boot; struct tms has the same layout. */

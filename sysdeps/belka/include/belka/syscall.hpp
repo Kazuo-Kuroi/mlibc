@@ -88,6 +88,8 @@ enum : long {
 	SYS_uname = 135,
 	SYS_setegid = 136,
 	SYS_seteuid = 141,
+	SYS_setitimer = 169,
+	SYS_getitimer = 170,
 	SYS_gettimeofday = 171,
 	SYS_lwpcreate = 173,
 	SYS_lwpexit = 174,

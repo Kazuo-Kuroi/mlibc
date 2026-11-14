@@ -77,6 +77,7 @@ struct BelkaSysdepTags :
 	ClockGetres,
 	Times,
 	SetItimer,
+	GetItimer,
 	GetRlimit,
 	SetRlimit,
 	GetRusage,
