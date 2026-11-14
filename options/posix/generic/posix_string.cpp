@@ -115,6 +115,18 @@ char *strsignal(int sig) {
 	CASE_FOR(SIGXCPU)
 	CASE_FOR(SIGXFSZ)
 	CASE_FOR(SIGWINCH)
+#ifdef SIGEMT
+	CASE_FOR(SIGEMT)
+#endif
+#ifdef SIGWAITING
+	CASE_FOR(SIGWAITING)
+#endif
+#ifdef SIGLWP
+	CASE_FOR(SIGLWP)
+#endif
+#ifdef SIGAIO
+	CASE_FOR(SIGAIO)
+#endif
 	default:
 		mlibc::infoLogger() << "mlibc: Unknown signal number " << sig << frg::endlog;
 		s = "Unknown signal number";
