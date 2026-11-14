@@ -557,6 +557,35 @@ int Sysdeps<Nice>::operator()(int nice, int *new_nice) {
 }
 
 /*
+ * getpriority() and setpriority() for the calling process, which is all
+ * that nice() reaches: its nice value less NZERO (nice(0) reads it). Other
+ * processes, groups and users: ENOSYS, for now.
+ */
+int Sysdeps<GetPriority>::operator()(int which, id_t who, int *value) {
+	if (which != PRIO_PROCESS || (who != 0 && static_cast<pid_t>(who) != static_cast<pid_t>(sc(belka::SYS_getpid).value)))
+		return ENOSYS;
+	auto r = sc(belka::SYS_nice, 0);
+	if (r.error)
+		return r.error;
+	*value = static_cast<int>(r.value);
+	return 0;
+}
+
+int Sysdeps<SetPriority>::operator()(int which, id_t who, int prio) {
+	int cur;
+	if (int e = mlibc::sysdep<GetPriority>(which, who, &cur); e)
+		return e;
+	if (prio == cur)
+		return 0;
+	return sc(belka::SYS_nice, prio - cur).error;
+}
+
+/* No sockets yet: nothing is a socket. */
+int Sysdeps<Peername>::operator()(int, struct sockaddr *, socklen_t, socklen_t *) {
+	return ENOTSOCK;
+}
+
+/*
  * A terminal's name, from its device number: the console is
  * /dev/console and pseudo-terminal slave N is /dev/pts/N (majors 1 and
  * 5, in the upper 32 bits). Belka has no other terminals.
