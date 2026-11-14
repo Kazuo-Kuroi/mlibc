@@ -53,6 +53,8 @@ struct BelkaSysdepTags :
 	Tcsendbreak,
 	Tcgetwinsize,
 	Tcsetwinsize,
+	Ptsname,
+	Unlockpt,
 	Stat,
 	Access,
 	Readlink,

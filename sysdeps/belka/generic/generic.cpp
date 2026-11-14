@@ -480,6 +480,38 @@ int Sysdeps<Tcsetwinsize>::operator()(int fd, const struct winsize *winsz) {
 	return sc(belka::SYS_ioctl, fd, TIOCSWINSZ, winsz).error;
 }
 
+/*
+ * Pseudo-terminals, System V's way: /dev/ptmx makes a pair (Open); UNLKPT
+ * lets the slave be opened; the slave is /dev/pts/ and the master's minor
+ * device number (the low 32 bits), once ISPTM says the file is a master.
+ */
+constexpr unsigned long belka_ISPTM = ('P' << 8) | 1;
+constexpr unsigned long belka_UNLKPT = ('P' << 8) | 2;
+
+int Sysdeps<Unlockpt>::operator()(int fd) {
+	return sc(belka::SYS_ioctl, fd, belka_UNLKPT, 0).error;
+}
+
+int Sysdeps<Ptsname>::operator()(int fd, char *buffer, size_t length) {
+	if (int e = sc(belka::SYS_ioctl, fd, belka_ISPTM, 0).error; e)
+		return e;
+	struct stat st;
+	if (int e = sc(belka::SYS_fstat, fd, &st).error; e)
+		return e;
+	char digits[12];
+	size_t n = 0;
+	for (auto m = static_cast<uint32_t>(st.st_rdev); n == 0 || m != 0; m /= 10)
+		digits[n++] = static_cast<char>('0' + m % 10);
+	const char prefix[] = "/dev/pts/";
+	if (sizeof(prefix) + n > length)
+		return ERANGE;
+	memcpy(buffer, prefix, sizeof(prefix) - 1);
+	for (size_t i = 0; i < n; i++)
+		buffer[sizeof(prefix) - 1 + i] = digits[n - 1 - i];
+	buffer[sizeof(prefix) - 1 + n] = 0;
+	return 0;
+}
+
 int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int flags, struct stat *statbuf) {
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
 		return EINVAL;
