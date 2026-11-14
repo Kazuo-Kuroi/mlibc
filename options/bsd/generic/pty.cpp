@@ -78,9 +78,13 @@ int login_tty(int fd) {
 		return -1;
 	}
 
-	if(int e = mlibc::sysdep<Close>(fd); e) {
-		errno = e;
-		return -1;
+	// fd may itself be 0, 1 or 2 (a caller that started with them
+	// closed): it is the terminal now, so leave it open.
+	if(fd > STDERR_FILENO) {
+		if(int e = mlibc::sysdep<Close>(fd); e) {
+			errno = e;
+			return -1;
+		}
 	}
 	return 0;
 }
