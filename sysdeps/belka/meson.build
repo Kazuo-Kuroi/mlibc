@@ -32,8 +32,8 @@ libc_sources += files(
 # copies a link as a link.
 abi_belka_headers = [
 	'errno', 'fcntl', 'ioctls', 'nlink_t', 'poll', 'resource',
-	'seek-whence', 'sig-limits', 'signal', 'sigset_t', 'stat', 'termios',
-	'utsname', 'vm-flags', 'wait',
+	'seek-whence', 'sig-limits', 'signal', 'sigset_t', 'stat', 'statvfs',
+	'termios', 'utsname', 'vm-flags', 'wait',
 ]
 abi_linux_headers = [
 	'access', 'aio', 'auxv', 'blkcnt_t', 'blksize_t', 'clockid_t',
@@ -41,7 +41,7 @@ abi_linux_headers = [
 	'ipc', 'limits', 'mode_t', 'mqueue', 'msg', 'pid_t',
 	'riscv-hwprobe', 'rlim_t', 'route', 'sa_family_t',
 	'sched_param', 'sem', 'shm', 'sigevent', 'sigval',
-	'sockaddr_storage', 'socket', 'socklen_t', 'statvfs', 'suseconds_t',
+	'sockaddr_storage', 'socket', 'socklen_t', 'suseconds_t',
 	'time', 'uid_t', 'utmp-defines', 'utmpx',
 ]
 

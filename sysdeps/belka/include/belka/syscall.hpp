@@ -39,10 +39,13 @@ enum : long {
 	SYS_getpid = 20,
 	SYS_setuid = 23,
 	SYS_getuid = 24,
+	SYS_stime = 25,
 	SYS_alarm = 27,
+	SYS_utime = 30,
 	SYS_fstat = 28,
 	SYS_pause = 29,
 	SYS_access = 33,
+	SYS_nice = 34,
 	SYS_sync = 36,
 	SYS_kill = 37,
 	SYS_pgrpsys = 39,
@@ -74,6 +77,8 @@ enum : long {
 	SYS_sigaction = 98,
 	SYS_sigpending = 99,
 	SYS_context = 100,
+	SYS_statvfs = 103,
+	SYS_fstatvfs = 104,
 	SYS_waitsys = 107,
 	SYS_mmap = 115,
 	SYS_mprotect = 116,
@@ -128,6 +133,7 @@ enum : long {
 	SYS_faccessat = 224,
 	SYS_pollsys = 225,
 	SYS_getrusage = 226,
+	SYS_utimensat = 227,
 };
 
 /* context() commands. */

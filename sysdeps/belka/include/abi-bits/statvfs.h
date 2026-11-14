@@ -1,1 +1,1 @@
-../../../../abis/linux/statvfs.h
+../../../../abis/belka/statvfs.h

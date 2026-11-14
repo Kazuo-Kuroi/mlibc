@@ -13,6 +13,8 @@
 #include <string.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <termios.h>
@@ -531,6 +533,72 @@ int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int f
 	}
 }
 
+/* The kernel's struct statvfs has the C library's layout. */
+int Sysdeps<Statvfs>::operator()(const char *path, struct statvfs *out) {
+	return sc(belka::SYS_statvfs, path, out).error;
+}
+
+int Sysdeps<Fstatvfs>::operator()(int fd, struct statvfs *out) {
+	return sc(belka::SYS_fstatvfs, fd, out).error;
+}
+
+/* Belka's own utimensat (227); a NULL path names dirfd's file itself. */
+int Sysdeps<Utimensat>::operator()(int dirfd, const char *pathname, const struct timespec times[2], int flags) {
+	return sc(belka::SYS_utimensat, dirfd, pathname, times, flags).error;
+}
+
+/* System V's nice() returns the new nice value less NZERO, as POSIX's does. */
+int Sysdeps<Nice>::operator()(int nice, int *new_nice) {
+	auto r = sc(belka::SYS_nice, nice);
+	if (r.error)
+		return r.error;
+	*new_nice = static_cast<int>(r.value);
+	return 0;
+}
+
+/*
+ * A terminal's name, from its device number: the console is
+ * /dev/console and pseudo-terminal slave N is /dev/pts/N (majors 1 and
+ * 5, in the upper 32 bits). Belka has no other terminals.
+ */
+int Sysdeps<Ttyname>::operator()(int fd, char *buf, size_t size) {
+	struct stat st;
+	if (int e = sc(belka::SYS_fstat, fd, &st).error; e)
+		return e;
+	if (int e = mlibc::sysdep<Isatty>(fd); e)
+		return ENOTTY;
+	unsigned long major = static_cast<unsigned long>(st.st_rdev >> 32);
+	unsigned long minor = static_cast<unsigned long>(st.st_rdev & 0xffffffffu);
+	if (!S_ISCHR(st.st_mode))
+		return ENOTTY;
+
+	// Built by hand: this file is in ld.so.1 too, which has no snprintf().
+	char name[32];
+	size_t n;
+	if (major == 1) {
+		n = strlen("/dev/console");
+		memcpy(name, "/dev/console", n);
+	} else if (major == 5) {
+		char digits[24];
+		size_t k = 0;
+		do {
+			digits[k++] = static_cast<char>('0' + minor % 10);
+			minor /= 10;
+		} while (minor != 0);
+		n = strlen("/dev/pts/");
+		memcpy(name, "/dev/pts/", n);
+		while (k > 0)
+			name[n++] = digits[--k];
+	} else {
+		return ENOTTY;
+	}
+	if (n + 1 > size)
+		return ERANGE;
+	memcpy(buf, name, n);
+	buf[n] = '\0';
+	return 0;
+}
+
 int Sysdeps<Access>::operator()(const char *path, int mode) {
 	return sc(belka::SYS_access, path, mode).error;
 }
@@ -657,6 +725,18 @@ int Sysdeps<ClockGet>::operator()(int clock, time_t *secs, long *nanos) {
 	*secs = ts.tv_sec;
 	*nanos = ts.tv_nsec;
 	return 0;
+}
+
+/*
+ * stime() (UnixWare's 25) sets the time of day in whole seconds, so a
+ * fraction is rounded to the nearest; only CLOCK_REALTIME can be set.
+ */
+int Sysdeps<ClockSet>::operator()(int clock, time_t secs, long nanos) {
+	if (clock != CLOCK_REALTIME)
+		return EINVAL;
+	if (nanos < 0 || nanos >= 1000000000)
+		return EINVAL;
+	return sc(belka::SYS_stime, secs + (nanos >= 500000000)).error;
 }
 
 int Sysdeps<ClockGetres>::operator()(int clock, time_t *secs, long *nanos) {
