@@ -1,1 +1,1 @@
-../../../../abis/linux/ioctls.h
+../../../../abis/belka/ioctls.h

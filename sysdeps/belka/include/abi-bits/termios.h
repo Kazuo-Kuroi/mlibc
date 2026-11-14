@@ -1,1 +1,1 @@
-../../../../abis/linux/termios.h
+../../../../abis/belka/termios.h

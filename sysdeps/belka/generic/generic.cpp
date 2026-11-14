@@ -14,6 +14,7 @@
 #include <sys/select.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
+#include <termios.h>
 #include <sys/time.h>
 #include <sys/times.h>
 #include <sys/uio.h>
@@ -30,9 +31,6 @@ namespace {
 
 /* Flags the kernel does not take yet, which open() carries out itself. */
 constexpr int libc_open_flags = O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW;
-
-/* TCGETA, the System V terminal attribute request, as an isatty() probe. */
-constexpr unsigned long belka_TCGETA = ('T' << 8) | 1;
 
 int set_cloexec(int fd) {
 	return sc(belka::SYS_fcntl, fd, F_SETFD, FD_CLOEXEC).error;
@@ -436,9 +434,50 @@ int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *re
 	return 0;
 }
 
+/* TCGETA, the System V terminal attribute request, as the isatty() probe. */
 int Sysdeps<Isatty>::operator()(int fd) {
 	char termio[64];
-	return sc(belka::SYS_ioctl, fd, belka_TCGETA, termio).error;
+	return sc(belka::SYS_ioctl, fd, TCGETA, termio).error;
+}
+
+/* The terminal calls are System V's ioctls; TCSANOW and the rest pick the TCSETS form. */
+int Sysdeps<Tcgetattr>::operator()(int fd, struct termios *attr) {
+	return sc(belka::SYS_ioctl, fd, TCGETS, attr).error;
+}
+
+int Sysdeps<Tcsetattr>::operator()(int fd, int act, const struct termios *attr) {
+	unsigned long req;
+	switch (act) {
+	case TCSANOW: req = TCSETS; break;
+	case TCSADRAIN: req = TCSETSW; break;
+	case TCSAFLUSH: req = TCSETSF; break;
+	default: return EINVAL;
+	}
+	return sc(belka::SYS_ioctl, fd, req, attr).error;
+}
+
+int Sysdeps<Tcflush>::operator()(int fd, int queue) {
+	return sc(belka::SYS_ioctl, fd, TCFLSH, queue).error;
+}
+
+int Sysdeps<Tcdrain>::operator()(int fd) {
+	return sc(belka::SYS_ioctl, fd, TCSBRK, 1).error;
+}
+
+int Sysdeps<Tcflow>::operator()(int fd, int action) {
+	return sc(belka::SYS_ioctl, fd, TCXONC, action).error;
+}
+
+int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
+	return sc(belka::SYS_ioctl, fd, TCSBRK, 0).error;
+}
+
+int Sysdeps<Tcgetwinsize>::operator()(int fd, struct winsize *winsz) {
+	return sc(belka::SYS_ioctl, fd, TIOCGWINSZ, winsz).error;
+}
+
+int Sysdeps<Tcsetwinsize>::operator()(int fd, const struct winsize *winsz) {
+	return sc(belka::SYS_ioctl, fd, TIOCSWINSZ, winsz).error;
 }
 
 int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int flags, struct stat *statbuf) {

@@ -21,6 +21,8 @@ int ioctl(int __fd, unsigned long __request, ...);
 
 #endif /* !__MLIBC_ABI_ONLY */
 
+/* Linux's numbers, unless the ABI gave its own (abi-bits/ioctls.h). */
+#ifndef FIONREAD
 #define TIOCMGET 0x5415
 #define TIOCMBIS 0x5416
 #define TIOCMBIC 0x5417
@@ -29,6 +31,7 @@ int ioctl(int __fd, unsigned long __request, ...);
 #define FIONBIO 0x5421
 #define FIONCLEX 0x5450
 #define FIOCLEX 0x5451
+#endif
 
 #define SIOCGIFNAME 0x8910
 #define SIOCGIFCONF 0x8912

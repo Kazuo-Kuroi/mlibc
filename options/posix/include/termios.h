@@ -99,7 +99,8 @@ void cfmakeraw(struct termios *__tios);
 
 #endif /* !__MLIBC_ABI_ONLY */
 
-#if defined(_DEFAULT_SOURCE)
+/* Linux's numbers, unless the ABI gave its own with its termios. */
+#if defined(_DEFAULT_SOURCE) && !defined(TIOCGWINSZ)
 #define TIOCSCTTY 0x540E
 #define TIOCGPGRP 0x540F
 #define TIOCSPGRP 0x5410
