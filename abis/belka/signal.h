@@ -9,6 +9,7 @@
 
 #include <mlibc-config.h>
 #include <abi-bits/pid_t.h>
+#include <bits/ansi/clock_t.h>
 #include <abi-bits/sigval.h>
 #include <abi-bits/sigset_t.h>
 #include <abi-bits/uid_t.h>
@@ -41,6 +42,8 @@ typedef struct {
 				int __status;		/* SIGCHLD */
 				union sigval __value;	/* queued signals */
 			} __u;
+			clock_t __utime;	/* SIGCHLD, exited: ticks */
+			clock_t __stime;
 		} __proc;
 		struct {
 			void *__addr;		/* faults */
@@ -53,6 +56,8 @@ typedef struct {
 #define si_uid __data.__proc.__uid
 #define si_status __data.__proc.__u.__status
 #define si_value __data.__proc.__u.__value
+#define si_utime __data.__proc.__utime
+#define si_stime __data.__proc.__stime
 #define si_addr __data.__fault.__addr
 
 #ifdef __cplusplus

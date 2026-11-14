@@ -13,6 +13,9 @@
 
 namespace belka {
 
+// The clock tick: times(), and the times in a SIGCHLD siginfo_t, count in it.
+constexpr long HZ = 100;
+
 enum : long {
 	SYS_exit = 1,
 	SYS_fork = 2,

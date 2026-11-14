@@ -681,7 +681,6 @@ int Sysdeps<GetRusage>::operator()(int scope, struct rusage *usage) {
 	return sc(belka::SYS_getrusage, scope, usage).error;
 }
 
-/* times() returns the ticks since boot; struct tms has the same layout. */
 /*
  * There are no interval timers yet: ITIMER_REAL without an interval is
  * the alarm call, in whole seconds (rounded up), which is what alarm()
@@ -701,6 +700,7 @@ int Sysdeps<SetItimer>::operator()(int which, const struct itimerval *new_value,
 	return 0;
 }
 
+/* times() returns the ticks since boot; struct tms has the same layout. */
 int Sysdeps<Times>::operator()(struct tms *tms, clock_t *out) {
 	auto r = sc(belka::SYS_times, tms);
 	if (r.error)
@@ -717,7 +717,7 @@ void Sysdeps<Yield>::operator()() {
 int Sysdeps<Sysconf>::operator()(int num, long *ret) {
 	switch (num) {
 	case _SC_CLK_TCK:
-		*ret = 100;
+		*ret = belka::HZ;
 		return 0;
 	default:
 		return EINVAL;
@@ -838,10 +838,12 @@ int Sysdeps<Execve>::operator()(const char *path, char *const argv[], char *cons
 	return sc(belka::SYS_execve, path, argv, envp).error;
 }
 
-/* waitpid() over waitsys(), which reports through a siginfo_t. */
+/*
+ * waitpid() over waitsys(), which reports through a siginfo_t; for
+ * wait3() and wait4(), an exited child's user and system time comes
+ * in it too, in clock ticks (the rest of *ru is zero).
+ */
 int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusage *ru, pid_t *ret_pid) {
-	if (ru)
-		return ENOSYS;
 	if (flags & ~(WNOHANG | WUNTRACED | WCONTINUED))
 		return EINVAL;
 
@@ -891,6 +893,13 @@ int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusag
 			*status = 0;
 			break;
 		}
+	}
+	if (ru) {
+		memset(ru, 0, sizeof(*ru));
+		ru->ru_utime.tv_sec = si.si_utime / belka::HZ;
+		ru->ru_utime.tv_usec = si.si_utime % belka::HZ * (1000000 / belka::HZ);
+		ru->ru_stime.tv_sec = si.si_stime / belka::HZ;
+		ru->ru_stime.tv_usec = si.si_stime % belka::HZ * (1000000 / belka::HZ);
 	}
 	*ret_pid = si.si_pid;
 	return 0;
