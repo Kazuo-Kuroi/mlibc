@@ -129,8 +129,23 @@ int abstract_file::read(char *buffer, size_t max_size, size_t *actual_size) {
 		}
 	}
 
+	// Before a line-buffered or unbuffered stream reads from its file,
+	// write out what other line-buffered streams hold, as the C standard
+	// intends: a prompt made with printf() is seen before getchar() waits.
+	auto flush_line_buffered = [this] {
+		if(_bufmode == buffer_mode::full_buffer)
+			return;
+		frg::unique_lock list_lock(global_file_list_mutex);
+		for(auto it : global_file_list()) {
+			if(it != this && it->_bufmode == buffer_mode::line_buffer
+					&& it->__dirty_begin != it->__dirty_end)
+				it->flush();
+		}
+	};
+
 	if(globallyDisableBuffering || _bufmode == buffer_mode::no_buffer) {
 		size_t io_size;
+		flush_line_buffered();
 		if(int e = io_read(buffer, max_size, &io_size); e) {
 			__status_bits |= __MLIBC_ERROR_BIT;
 			return e;
@@ -159,6 +174,7 @@ int abstract_file::read(char *buffer, size_t max_size, size_t *actual_size) {
 		// Perform a read-ahead.
 		_ensure_allocation();
 		size_t io_size;
+		flush_line_buffered();
 		if(int e = io_read(__buffer_ptr, __buffer_size, &io_size); e) {
 			__status_bits |= __MLIBC_ERROR_BIT;
 			return e;
