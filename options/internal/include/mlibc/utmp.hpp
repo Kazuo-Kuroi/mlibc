@@ -85,13 +85,65 @@ int getUtmpEntryByType(int fd, const U *id, U *res) {
 		if(int e = getUtmpEntry(fd, &tmp); e)
 			return e;
 
-		if(id->ut_type == USER_PROCESS || id->ut_type == LOGIN_PROCESS) {
+		// POSIX: the next USER_PROCESS or LOGIN_PROCESS entry with the line:
+		// the entry's type counts, not the key's, which need not be set.
+		if(tmp.ut_type == USER_PROCESS || tmp.ut_type == LOGIN_PROCESS) {
 			if(!strncmp(tmp.ut_line, id->ut_line, sizeof(U::ut_line))) {
 				memcpy(res, &tmp, sizeof(U));
 				return 0;
 			}
 		}
 	}
+}
+
+// Whether entry e is the one key names, by getutxid()'s rules.
+template <UtmpStruct U>
+bool utmpEntryMatches(const U *key, const U *e) {
+	if(key->ut_type == RUN_LVL || key->ut_type == BOOT_TIME
+	|| key->ut_type == NEW_TIME || key->ut_type == OLD_TIME)
+		return e->ut_type == key->ut_type;
+	if(key->ut_type == INIT_PROCESS || key->ut_type == LOGIN_PROCESS
+	|| key->ut_type == USER_PROCESS || key->ut_type == DEAD_PROCESS)
+		return (e->ut_type == INIT_PROCESS || e->ut_type == LOGIN_PROCESS
+		|| e->ut_type == USER_PROCESS || e->ut_type == DEAD_PROCESS)
+		&& !memcmp(e->ut_id, key->ut_id, sizeof(U::ut_id));
+	return false;
+}
+
+template <UtmpStruct U>
+int putUtmpEntry(int fd, const U *ut);
+
+// pututxline(): write ut over the entry it names, from the start of the
+// file, or add it at the end if there is none.
+template <UtmpStruct U>
+int replaceUtmpEntry(int fd, const U *ut) {
+	off_t pos;
+	if(int e = sysdep<Seek>(fd, 0, SEEK_SET, &pos); e)
+		return e;
+	while(true) {
+		U tmp;
+		int e = getUtmpEntry(fd, &tmp);
+		if(e == ESRCH)
+			break;
+		if(e)
+			return e;
+		if(utmpEntryMatches(ut, &tmp)) {
+			off_t discard;
+			if(int e2 = sysdep<Seek>(fd, pos, SEEK_SET, &discard); e2)
+				return e2;
+			size_t progress = 0;
+			const char *ptr = reinterpret_cast<const char *>(ut);
+			while(progress < sizeof(U)) {
+				ssize_t written = 0;
+				if(int e3 = sysdep<Write>(fd, ptr + progress, sizeof(U) - progress, &written); e3)
+					return e3;
+				progress += written;
+			}
+			return 0;
+		}
+		pos += sizeof(U);
+	}
+	return putUtmpEntry(fd, ut);
 }
 
 template <UtmpStruct U>

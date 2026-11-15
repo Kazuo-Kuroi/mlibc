@@ -126,7 +126,7 @@ struct utmpx *pututxline(const struct utmpx *ut) {
 		return nullptr;
 	}
 
-	if(int e = mlibc::putUtmpEntry(*utmpxFd, ut); e) {
+	if(int e = mlibc::replaceUtmpEntry(*utmpxFd, ut); e) {
 		errno = e;
 		return nullptr;
 	}
