@@ -33,7 +33,7 @@ libc_sources += files(
 abi_belka_headers = [
 	'errno', 'fcntl', 'ioctls', 'nlink_t', 'poll', 'resource',
 	'seek-whence', 'sig-limits', 'signal', 'sigset_t', 'stat', 'statvfs',
-	'termios', 'utsname', 'vm-flags', 'wait',
+	'termios', 'utmpx', 'utsname', 'vm-flags', 'wait',
 ]
 abi_linux_headers = [
 	'access', 'aio', 'auxv', 'blkcnt_t', 'blksize_t', 'clockid_t',
@@ -42,7 +42,7 @@ abi_linux_headers = [
 	'riscv-hwprobe', 'rlim_t', 'route', 'sa_family_t',
 	'sched_param', 'sem', 'shm', 'sigevent', 'sigval',
 	'sockaddr_storage', 'socket', 'socklen_t', 'suseconds_t',
-	'time', 'uid_t', 'utmp-defines', 'utmpx',
+	'time', 'uid_t', 'utmp-defines',
 ]
 
 if not no_headers

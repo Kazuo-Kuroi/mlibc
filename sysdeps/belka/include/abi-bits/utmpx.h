@@ -1,1 +1,1 @@
-../../../../abis/linux/utmpx.h
+../../../../abis/belka/utmpx.h
