@@ -43,6 +43,7 @@ struct BelkaSysdepTags :
 	Dup,
 	Dup2,
 	Fcntl,
+	Flock,
 	Ioctl,
 	Isatty,
 	Tcgetattr,
