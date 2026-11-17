@@ -34,6 +34,19 @@ int Sysdeps<Sigpending>::operator()(sigset_t *set) {
 	return belka::sc(belka::SYS_sigpending, belka::SIGPENDING_PENDING, set).error;
 }
 
+int Sysdeps<Sigtimedwait>::operator()(const sigset_t *__restrict set,
+		siginfo_t *__restrict info, const struct timespec *__restrict timeout, int *out_signal) {
+	auto result = belka::sc(belka::SYS_sigwait, set, info, timeout);
+	if (result.error)
+		return result.error;
+	*out_signal = static_cast<int>(result.value);
+	return 0;
+}
+
+int Sysdeps<Sigqueue>::operator()(pid_t pid, int sig, const union sigval value) {
+	return belka::sc(belka::SYS_sigqueue, pid, sig, &value).error;
+}
+
 int Sysdeps<Sigaltstack>::operator()(const stack_t *ss, stack_t *oss) {
 	return belka::sc(belka::SYS_sigaltstack, ss, oss).error;
 }

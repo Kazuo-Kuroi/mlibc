@@ -134,6 +134,8 @@ struct BelkaSysdepTags :
 	ThreadSigmask,
 	Sigsuspend,
 	Sigpending,
+	Sigtimedwait,
+	Sigqueue,
 	Sigaltstack,
 	Pause
 {};

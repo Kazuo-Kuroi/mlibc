@@ -89,14 +89,14 @@ int sigwaitinfo(const sigset_t *__restrict set, siginfo_t *__restrict info) {
 }
 
 int sigwait(const sigset_t *__restrict set, int *__restrict sig) {
-	if (int e = sigwaitinfo(set, nullptr); e < 0) {
-		return e;
-	} else {
-		if (sig)
-			*sig = e;
-
-		return 0;
-	}
+	int signo;
+	int error;
+	do {
+		error = mlibc::sysdep_or_enosys<Sigtimedwait>(set, nullptr, nullptr, &signo);
+	} while (error == EINTR);
+	if (!error && sig)
+		*sig = signo;
+	return error;
 }
 
 int sigpending(sigset_t *set) {

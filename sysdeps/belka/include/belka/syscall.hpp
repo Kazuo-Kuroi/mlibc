@@ -138,6 +138,7 @@ enum : long {
 	SYS_getrusage = 226,
 	SYS_utimensat = 227,
 	SYS_flock = 228,
+	SYS_sigqueue = 229,
 };
 
 /* context() commands. */
