@@ -5,6 +5,7 @@
 #include <bits/ensure.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <signal.h>
@@ -82,6 +83,14 @@ char *strsep(char **m, const char *del) {
 }
 
 char *strsignal(int sig) {
+#if defined(SIGRTMIN) && defined(SIGRTMAX)
+	if(sig >= SIGRTMIN && sig <= SIGRTMAX) {
+		static thread_local char realtime_name[32];
+		snprintf(realtime_name, sizeof(realtime_name), "SIGRTMIN+%d", sig - SIGRTMIN);
+		return realtime_name;
+	}
+#endif
+
 	#define CASE_FOR(sigconst) case sigconst: s = #sigconst; break;
 	const char *s;
 	switch(sig) {
