@@ -178,13 +178,45 @@ int getspnam_r(const char *name, struct spwd *sp, char *buf, size_t size, struct
 	return rv;
 }
 
+namespace {
+	int pwd_lock_fd = -1;
+}
+
+// The password files' lock, as System V has it: a write lock on /etc/.pwd.lock, waited
+// for up to 15 seconds (tried each second, so that no alarm is needed).
 int lckpwdf(void) {
-	mlibc::infoLogger() << "mlibc: lckpwdf is unimplemented like musl" << frg::endlog;
+	if(pwd_lock_fd >= 0) {
+		errno = EDEADLK;
+		return -1;
+	}
+	int fd = open("/etc/.pwd.lock", O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
+	if(fd < 0)
+		return -1;
+	for(int tries = 0; ; tries++) {
+		struct flock fl = {};
+		fl.l_type = F_WRLCK;
+		fl.l_whence = SEEK_SET;
+		if(fcntl(fd, F_SETLK, &fl) == 0)
+			break;
+		if((errno != EAGAIN && errno != EACCES) || tries == 15) {
+			int e = errno;
+			close(fd);
+			errno = e;
+			return -1;
+		}
+		sleep(1);
+	}
+	pwd_lock_fd = fd;
 	return 0;
 }
 
 int ulckpwdf(void) {
-	mlibc::infoLogger() << "mlibc: ulckpwdf is unimplemented like musl" << frg::endlog;
+	if(pwd_lock_fd < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	close(pwd_lock_fd);
+	pwd_lock_fd = -1;
 	return 0;
 }
 

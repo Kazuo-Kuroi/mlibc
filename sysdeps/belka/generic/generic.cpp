@@ -429,25 +429,9 @@ int Sysdeps<Fcntl>::operator()(int fd, int request, va_list args, int *result) {
 	return 0;
 }
 
-/*
- * flock: BSD's whole-file locks, as a record lock over the whole file
- * (F_SETLK, or F_SETLKW to wait). Belka has no locks of its own for
- * open files, so these are the process's, as fcntl's are: a dup or a
- * fork does not share them, and any close of the file drops them.
- */
+/* flock: BSD's whole-file locks, owned by the open file (the kernel's). */
 int Sysdeps<Flock>::operator()(int fd, int op) {
-	struct flock fl = {};
-	int cmd = (op & LOCK_NB) ? F_SETLK : F_SETLKW;
-
-	switch (op & ~LOCK_NB) {
-	case LOCK_SH: fl.l_type = F_RDLCK; break;
-	case LOCK_EX: fl.l_type = F_WRLCK; break;
-	case LOCK_UN: fl.l_type = F_UNLCK; break;
-	default: return EINVAL;
-	}
-	fl.l_whence = SEEK_SET;
-	auto r = sc(belka::SYS_fcntl, fd, cmd, &fl);
-	return (r.error == EACCES || r.error == EAGAIN) ? EWOULDBLOCK : r.error;
+	return sc(belka::SYS_flock, fd, op).error;
 }
 
 int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *result) {

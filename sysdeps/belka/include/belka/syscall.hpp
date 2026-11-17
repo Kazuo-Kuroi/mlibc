@@ -134,6 +134,7 @@ enum : long {
 	SYS_pollsys = 225,
 	SYS_getrusage = 226,
 	SYS_utimensat = 227,
+	SYS_flock = 228,
 };
 
 /* context() commands. */
