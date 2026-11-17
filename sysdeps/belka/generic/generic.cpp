@@ -323,29 +323,11 @@ int Sysdeps<Pselect>::operator()(int num_fds, fd_set *read_set, fd_set *write_se
 }
 
 int Sysdeps<Pipe>::operator()(int *fds, int flags) {
-	if (flags & ~(O_CLOEXEC | O_NONBLOCK))
-		return EINVAL;
-	auto r = sc(belka::SYS_pipe);
+	auto r = flags ? sc(belka::SYS_pipe2, flags) : sc(belka::SYS_pipe);
 	if (r.error)
 		return r.error;
-	int ends[2] = {static_cast<int>(r.value), static_cast<int>(r.value2)};
-	for (int fd : ends) {
-		int e = 0;
-		if (flags & O_CLOEXEC)
-			e = set_cloexec(fd);
-		if (!e && (flags & O_NONBLOCK)) {
-			auto fl = sc(belka::SYS_fcntl, fd, F_GETFL);
-			e = fl.error ? fl.error
-				: sc(belka::SYS_fcntl, fd, F_SETFL, fl.value | O_NONBLOCK).error;
-		}
-		if (e) {
-			sc(belka::SYS_close, ends[0]);
-			sc(belka::SYS_close, ends[1]);
-			return e;
-		}
-	}
-	fds[0] = ends[0];
-	fds[1] = ends[1];
+	fds[0] = static_cast<int>(r.value);
+	fds[1] = static_cast<int>(r.value2);
 	return 0;
 }
 
@@ -1033,13 +1015,33 @@ int Sysdeps<Pause>::operator()() {
 	return sc(belka::SYS_pause).error;
 }
 
-/*
- * Only connected local pairs exist so far. This keeps syslog(), which
- * tries /dev/log first, quiet: it falls back as it does without a
- * logging daemon.
- */
-int Sysdeps<Socket>::operator()(int, int, int, int *) {
-	return EAFNOSUPPORT;
+int Sysdeps<Socket>::operator()(int family, int type, int protocol, int *fd) {
+	auto result = sc(belka::SYS_socket, family, type, protocol);
+	if (result.error)
+		return result.error;
+	*fd = static_cast<int>(result.value);
+	return 0;
+}
+
+int Sysdeps<Bind>::operator()(int fd, const struct sockaddr *addr, socklen_t size) {
+	return sc(belka::SYS_bind, fd, addr, size).error;
+}
+
+int Sysdeps<Listen>::operator()(int fd, int backlog) {
+	return sc(belka::SYS_listen, fd, backlog).error;
+}
+
+int Sysdeps<Connect>::operator()(int fd, const struct sockaddr *addr, socklen_t size) {
+	return sc(belka::SYS_connect, fd, addr, size).error;
+}
+
+int Sysdeps<Accept>::operator()(int fd, int *newfd, struct sockaddr *addr,
+		socklen_t *size, int flags) {
+	auto result = sc(belka::SYS_accept, fd, addr, size, flags);
+	if (result.error)
+		return result.error;
+	*newfd = static_cast<int>(result.value);
+	return 0;
 }
 
 int Sysdeps<Socketpair>::operator()(int domain, int type, int proto, int *fds) {

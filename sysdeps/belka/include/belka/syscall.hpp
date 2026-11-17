@@ -143,6 +143,12 @@ enum : long {
 	SYS_send = 231,
 	SYS_recv = 232,
 	SYS_sockatmark = 233,
+	SYS_pipe2 = 234,
+	SYS_socket = 235,
+	SYS_bind = 236,
+	SYS_listen = 237,
+	SYS_connect = 238,
+	SYS_accept = 239,
 };
 
 /* context() commands. */
