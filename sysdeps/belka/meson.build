@@ -64,6 +64,7 @@ if not no_headers
 	endforeach
 	install_headers(abi_headers, subdir: 'abi-bits')
 	install_headers('include/sys/mount.h', subdir: 'sys')
+	install_headers('include/stropts.h')
 endif
 
 if not headers_only

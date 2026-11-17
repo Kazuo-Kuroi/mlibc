@@ -31,4 +31,7 @@
 #define FIONBIO 0x8004667E
 #define FIONREAD 0x4004667F
 
+#define I_SETSIG 0x5309
+#define I_GETSIG 0x530a
+
 #endif /* _ABIBITS_IOCTLS_H */

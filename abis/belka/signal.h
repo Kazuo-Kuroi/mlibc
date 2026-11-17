@@ -48,6 +48,9 @@ typedef struct {
 		struct {
 			void *__addr;		/* faults */
 		} __fault;
+		struct {
+			long __band;		/* SIGPOLL */
+		} __poll;
 		char __pad[112];
 	} __data;
 } siginfo_t;
@@ -59,6 +62,7 @@ typedef struct {
 #define si_utime __data.__proc.__utime
 #define si_stime __data.__proc.__stime
 #define si_addr __data.__fault.__addr
+#define si_band __data.__poll.__band
 
 #ifdef __cplusplus
 extern "C" {
