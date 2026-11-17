@@ -1006,10 +1006,23 @@ constexpr static int days_from_civil(int y, unsigned m, unsigned d) noexcept {
 	return era * 146097 + static_cast<int>(doe) - 719468;
 }
 
+// The fields may be out of their ranges (C's mktime): months are folded into
+// years before the calendar is consulted, days, hours, minutes and seconds
+// simply add up, and the normalised time is written back to *tm, with
+// tm_wday and tm_yday.
 time_t timegm(struct tm *tm) {
-	time_t year = tm->tm_year + 1900;
-	time_t month = tm->tm_mon + 1;
-	time_t days = days_from_civil(year, month, tm->tm_mday);
-	time_t secs = (days * 86400) + (tm->tm_hour * 60 * 60) + (tm->tm_min * 60) + tm->tm_sec;
+	long long year = tm->tm_year + 1900LL;
+	long long mon = tm->tm_mon;
+	year += mon / 12;
+	mon %= 12;
+	if(mon < 0) {
+		mon += 12;
+		year--;
+	}
+	time_t days = days_from_civil(static_cast<int>(year), static_cast<unsigned>(mon) + 1, 1)
+		+ (static_cast<time_t>(tm->tm_mday) - 1);
+	time_t secs = (days * 86400) + (static_cast<time_t>(tm->tm_hour) * 60 * 60)
+		+ (static_cast<time_t>(tm->tm_min) * 60) + tm->tm_sec;
+	gmtime_r(&secs, tm);
 	return secs;
 }
