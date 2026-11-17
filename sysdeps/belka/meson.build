@@ -27,6 +27,7 @@ libc_sources += files(
 	'generic/generic.cpp',
 	'generic/signal.cpp',
 	'generic/cwd.cpp',
+	'generic/mount.cpp',
 	'generic/thread.cpp',
 	host_machine.cpu_family() / 'sigtramp.S',
 	host_machine.cpu_family() / 'thread.S',
@@ -60,6 +61,7 @@ if not no_headers
 		abi_headers += '../../abis/linux/' + h + '.h'
 	endforeach
 	install_headers(abi_headers, subdir: 'abi-bits')
+	install_headers('include/sys/mount.h', subdir: 'sys')
 endif
 
 if not headers_only

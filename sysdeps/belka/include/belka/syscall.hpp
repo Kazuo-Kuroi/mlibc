@@ -37,6 +37,8 @@ enum : long {
 	SYS_stat = 18,
 	SYS_lseek = 19,
 	SYS_getpid = 20,
+	SYS_mount = 21,
+	SYS_umount = 22,
 	SYS_setuid = 23,
 	SYS_getuid = 24,
 	SYS_stime = 25,
