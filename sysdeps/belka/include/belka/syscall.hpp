@@ -139,6 +139,10 @@ enum : long {
 	SYS_utimensat = 227,
 	SYS_flock = 228,
 	SYS_sigqueue = 229,
+	SYS_socketpair = 230,
+	SYS_send = 231,
+	SYS_recv = 232,
+	SYS_sockatmark = 233,
 };
 
 /* context() commands. */

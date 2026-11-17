@@ -409,7 +409,11 @@ int Sysdeps<Dup2>::operator()(int fd, int flags, int newfd) {
 }
 
 int Sysdeps<Fcntl>::operator()(int fd, int request, va_list args, int *result) {
-	long arg = va_arg(args, long);
+	long arg = 0;
+	if (request == F_SETOWN)
+		arg = va_arg(args, int);
+	else if (request != F_GETOWN)
+		arg = va_arg(args, long);
 	bool cloexec = false;
 
 	if (request == F_DUPFD_CLOEXEC) {
@@ -1030,12 +1034,51 @@ int Sysdeps<Pause>::operator()() {
 }
 
 /*
- * There are no sockets yet. Saying so plainly keeps syslog(), which
+ * Only connected local pairs exist so far. This keeps syslog(), which
  * tries /dev/log first, quiet: it falls back as it does without a
  * logging daemon.
  */
 int Sysdeps<Socket>::operator()(int, int, int, int *) {
 	return EAFNOSUPPORT;
+}
+
+int Sysdeps<Socketpair>::operator()(int domain, int type, int proto, int *fds) {
+	auto result = sc(belka::SYS_socketpair, domain, type, proto);
+	if (result.error)
+		return result.error;
+	fds[0] = static_cast<int>(result.value);
+	fds[1] = static_cast<int>(result.value2);
+	return 0;
+}
+
+int Sysdeps<Sendto>::operator()(int fd, const void *buf, size_t size, int flags,
+		const struct sockaddr *addr, socklen_t, ssize_t *length) {
+	if (addr)
+		return EISCONN;
+	auto result = sc(belka::SYS_send, fd, buf, size, flags);
+	if (result.error)
+		return result.error;
+	*length = result.value;
+	return 0;
+}
+
+int Sysdeps<Recvfrom>::operator()(int fd, void *buf, size_t size, int flags,
+		struct sockaddr *addr, socklen_t *addrlen, ssize_t *length) {
+	auto result = sc(belka::SYS_recv, fd, buf, size, flags);
+	if (result.error)
+		return result.error;
+	if (addr && addrlen)
+		*addrlen = 0;
+	*length = result.value;
+	return 0;
+}
+
+int Sysdeps<Sockatmark>::operator()(int fd, int *out) {
+	auto result = sc(belka::SYS_sockatmark, fd);
+	if (result.error)
+		return result.error;
+	*out = static_cast<int>(result.value);
+	return 0;
 }
 
 int Sysdeps<MsgSend>::operator()(int, const struct msghdr *, int, ssize_t *) {
