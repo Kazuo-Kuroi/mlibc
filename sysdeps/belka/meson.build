@@ -9,6 +9,12 @@ sysdep_supported_options = {
 # relocations. The generic string functions are used instead.
 internal_conf.set10('MLIBC_IFUNCS_SUPPORTED', false)
 
+# getopt() as POSIX and System V have it: it stops at the first operand,
+# rather than moving later options before it as glibc's does (BSD and
+# System V programs, find above all, take what follows an operand as
+# their own). getopt_long keeps GNU's permutation.
+internal_conf.set10('MLIBC_POSIX_GETOPT', true)
+
 rtld_include_dirs += include_directories('include')
 libc_include_dirs += include_directories('include')
 

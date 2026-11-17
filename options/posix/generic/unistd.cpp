@@ -16,6 +16,7 @@
 #include <utmpx.h>
 
 #include <bits/ensure.h>
+#include <internal-config.h>
 #include <mlibc-config.h>
 #include <mlibc/all-sysdeps.hpp>
 #include <mlibc/allocator.hpp>
@@ -519,6 +520,15 @@ int getlogin_r(char *name, size_t name_len) {
 }
 
 int getopt(int argc, char *const argv[], const char *optstring) {
+#if MLIBC_POSIX_GETOPT
+	// POSIX: stop at the first operand (or "-"), without permuting.
+	int i = optind ? optind : 1;
+	if(i >= argc || !argv[i] || argv[i][0] != '-' || !argv[i][1]) {
+		if(!optind)
+			optind = 1;
+		return -1;
+	}
+#endif
 	return mlibc::getopt_common(argc, argv, optstring, nullptr, nullptr, mlibc::GetoptMode::Short);
 }
 
