@@ -25,6 +25,7 @@ rtld_sources += files(
 )
 
 libc_sources += files(
+	'generic/aio.cpp',
 	'generic/entry.cpp',
 	'generic/generic.cpp',
 	'generic/signal.cpp',

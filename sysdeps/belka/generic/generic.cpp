@@ -928,14 +928,6 @@ int Sysdeps<SetSid>::operator()(pid_t *sid) {
 }
 
 /* fork() returns the other process's ID, and in %rdx whether this is the child. */
-int Sysdeps<Fork>::operator()(pid_t *child) {
-	auto r = sc(belka::SYS_fork);
-	if (r.error)
-		return r.error;
-	*child = r.value2 ? 0 : static_cast<pid_t>(r.value);
-	return 0;
-}
-
 int Sysdeps<Execve>::operator()(const char *path, char *const argv[], char *const envp[]) {
 	return sc(belka::SYS_execve, path, argv, envp).error;
 }

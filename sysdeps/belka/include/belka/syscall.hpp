@@ -149,6 +149,8 @@ enum : long {
 	SYS_listen = 237,
 	SYS_connect = 238,
 	SYS_accept = 239,
+	SYS_aio_notify = 240,
+	SYS_aio_dup = 241,
 };
 
 /* context() commands. */
