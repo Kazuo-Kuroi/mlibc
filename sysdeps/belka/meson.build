@@ -1,7 +1,6 @@
 sysdep_supported_options = {
 	'posix': true,
 	'posix-aio': false,
-	'posix-realtime-signals': false,
 	'glibc': true,
 	'bsd': true,
 }

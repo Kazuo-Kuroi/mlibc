@@ -113,8 +113,12 @@ void *worker(void *) {
 		pthread_mutex_unlock(&lock);
 
 		mlibc::sysdep<FutexWake>(&completed, true);
-		if (event.sigev_notify == SIGEV_SIGNAL)
-			belka::sc(belka::SYS_aio_notify, event.sigev_signo, &event.sigev_value);
+		if (event.sigev_notify == SIGEV_SIGNAL) {
+			const struct timespec retry = {0, 1000000};
+			while (belka::sc(belka::SYS_aio_notify, event.sigev_signo,
+					&event.sigev_value).error == EAGAIN)
+				nanosleep(&retry, nullptr);
+		}
 	}
 }
 

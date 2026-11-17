@@ -121,7 +121,7 @@ typedef void (*__sighandler) (int);
  * numbers above 34 that a sigset_t has room for are reserved for them.
  */
 #define SIGRTMIN 35
-#define SIGRTMAX 34
+#define SIGRTMAX 64
 
 #define SIGUNUSED SIGSYS
 
@@ -130,7 +130,7 @@ typedef void (*__sighandler) (int);
 #  define SIGCANCEL SIGLWP
 #endif
 
-#define _NSIG 35
+#define _NSIG 65
 #if defined(_DEFAULT_SOURCE)
 #define NSIG _NSIG
 #endif

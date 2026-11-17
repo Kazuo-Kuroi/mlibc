@@ -811,6 +811,12 @@ int Sysdeps<Sysconf>::operator()(int num, long *ret) {
 	case _SC_CLK_TCK:
 		*ret = belka::HZ;
 		return 0;
+	case _SC_RTSIG_MAX:
+		*ret = SIGRTMAX - SIGRTMIN + 1;
+		return 0;
+	case _SC_SIGQUEUE_MAX:
+		*ret = 32;
+		return 0;
 	default:
 		return EINVAL;
 	}
