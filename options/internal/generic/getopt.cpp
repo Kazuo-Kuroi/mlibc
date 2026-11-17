@@ -234,7 +234,8 @@ int getopt_common_internal(int argc, char * const argv[], const char *optstring,
 					}
 				}
 
-				auto opt = strchr(optstring, arg[i]);
+				// strchr would find the terminating NUL of optstring.
+				auto opt = arg[i] ? strchr(optstring, arg[i]) : nullptr;
 				if(opt) {
 					if(opt[0] == 'W' && w_long_options) {
 						const char *lo_arg = [&]() {
@@ -281,25 +282,32 @@ int getopt_common_internal(int argc, char * const argv[], const char *optstring,
 
 						if(arg[i+1]) {
 							optarg = arg + i + 1;
-						} else if(optind + 1 < argc && argv[optind + 1] && required && argv[optind + 1][0] != '-') {
+						} else if(optind + 1 < argc && argv[optind + 1] && required) {
 							/* there is an argument to this short option, separated by a space,
-								* and the shortopt specification does not specify an optional arg */
+								* and the shortopt specification does not specify an optional arg;
+								* as POSIX has it, the next word is the argument even if it
+								* begins with '-' */
 							optarg = argv[optind + 1];
 							optind++;
-							__optpos = 1;
 						} else if(!required) {
 							optarg = nullptr;
 						} else {
 							__optpos = 1;
 							optopt = arg[i];
+							optind++;
 							return colon ? ':' : '?';
 						}
+						// The rest of the word, or the next one, was the argument: the
+						// next option is at the start of the next word.
 						optind++;
+						__optpos = 1;
 					} else {
 						if(arg[i+1]) {
 							__optpos++;
 						} else if(arg[i]) {
+							// The last option of the word: the next starts a new word.
 							optind++;
+							__optpos = 1;
 						} else {
 							optarg = nullptr;
 							return -1;
@@ -311,10 +319,16 @@ int getopt_common_internal(int argc, char * const argv[], const char *optstring,
 					/*	If getopt() does not recognize an option character, it prints an error message to stderr,
 						stores the character in optopt, and returns '?'. The calling program may prevent
 						the error message by setting opterr to 0. */
-					optopt = arg[1];
+					optopt = arg[i];
 					if(opterr)
 						fprintf(stderr, "%s is not a valid option.\n", arg);
-					optind++;
+					// Go on with the rest of the word, or the next one.
+					if(arg[i] && arg[i+1]) {
+						__optpos++;
+					} else {
+						optind++;
+						__optpos = 1;
+					}
 					return '?';
 				}
 			}
