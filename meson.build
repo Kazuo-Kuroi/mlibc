@@ -356,6 +356,8 @@ linux_reboot_option = sysdep_supported_options.get('linux-reboot', linux_option)
 linux_wrappers_option = linux_option and sysdep_supported_options.get('linux_wrappers', false)
 
 mlibc_conf.set10('__MLIBC_POSIX_OPTION', posix_option)
+mlibc_conf.set10('__MLIBC_POSIX_ASYNCHRONOUS_IO', sysdep_supported_options.get('posix-aio', true))
+mlibc_conf.set10('__MLIBC_POSIX_REALTIME_SIGNALS', sysdep_supported_options.get('posix-realtime-signals', true))
 mlibc_conf.set10('__MLIBC_LINUX_OPTION', linux_option)
 mlibc_conf.set10('__MLIBC_GLIBC_OPTION', glibc_option)
 mlibc_conf.set10('__MLIBC_BSD_OPTION', bsd_option)
