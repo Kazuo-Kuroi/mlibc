@@ -845,6 +845,16 @@ int Sysdeps<GetHostname>::operator()(char *buffer, size_t bufsize) {
 	return 0;
 }
 
+/* sethostname: sysinfo(SI_SET_HOSTNAME), System V's; the name need not end in a NUL. */
+int Sysdeps<SetHostname>::operator()(const char *buffer, size_t bufsize) {
+	char name[256];
+	if (bufsize >= sizeof(name))
+		return EINVAL;
+	memcpy(name, buffer, bufsize);
+	name[bufsize] = 0;
+	return sc(belka::SYS_systeminfo, 258 /* SI_SET_HOSTNAME */, name, 0).error;
+}
+
 /* getpid() returns the process ID and the parent's; getuid() and getgid() the real and effective IDs. */
 pid_t Sysdeps<GetPid>::operator()() {
 	return static_cast<pid_t>(sc(belka::SYS_getpid).value);

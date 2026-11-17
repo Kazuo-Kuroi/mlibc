@@ -107,6 +107,7 @@ struct BelkaSysdepTags :
 	GetCwd,
 	Uname,
 	GetHostname,
+	SetHostname,
 	GetPid,
 	GetPpid,
 	GetTid,

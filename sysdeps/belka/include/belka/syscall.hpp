@@ -93,6 +93,7 @@ enum : long {
 	SYS_lchown = 130,
 	SYS_rename = 134,
 	SYS_uname = 135,
+	SYS_systeminfo = 139,
 	SYS_setegid = 136,
 	SYS_seteuid = 141,
 	SYS_setitimer = 169,
