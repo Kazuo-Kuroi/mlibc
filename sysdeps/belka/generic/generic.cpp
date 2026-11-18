@@ -536,6 +536,12 @@ int Sysdeps<Fstatvfs>::operator()(int fd, struct statvfs *out) {
 
 /* Belka's own utimensat (227); a NULL path names dirfd's file itself. */
 int Sysdeps<Utimensat>::operator()(int dirfd, const char *pathname, const struct timespec times[2], int flags) {
+	// mlibc uses Linux's empty-path form for descriptor-based time updates.
+	// Belka's existing descriptor form uses a null path and no flags.
+	if(flags == AT_EMPTY_PATH && pathname && pathname[0] == '\0') {
+		pathname = nullptr;
+		flags = 0;
+	}
 	return sc(belka::SYS_utimensat, dirfd, pathname, times, flags).error;
 }
 
