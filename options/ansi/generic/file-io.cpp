@@ -520,7 +520,20 @@ int fd_file::reopen(const char *path, const char *mode) {
 		return e;
 	}
 
-	close();
+	// Keep the descriptor number: freopen(stdout) must remain usable by
+	// children that inherit the standard descriptors across exec.
+	if constexpr (IsImplemented<Dup2>) {
+		if(fd != _fd) {
+			if(int e = sysdep<Dup2>(fd, mode_flags & O_CLOEXEC, _fd); e) {
+				sysdep<Close>(fd);
+				return e;
+			}
+			sysdep<Close>(fd);
+		}
+		fd = _fd;
+	} else {
+		close();
+	}
 	if (__buffer_ptr)
 		getAllocator().deallocate(__buffer_ptr - ungetBufferSize, __buffer_size + ungetBufferSize);
 
