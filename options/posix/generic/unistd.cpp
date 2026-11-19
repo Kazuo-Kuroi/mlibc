@@ -160,7 +160,8 @@ static int exec_path(const char *path, char *const argv[], char *const envp[]) {
 		return e;
 
 	frg::vector<char *, MemoryAllocator> shell_argv{getAllocator()};
-	shell_argv.push(argv[0] ? argv[0] : const_cast<char *>("sh"));
+	// Select the sh utility, not shell extensions keyed by the caller name.
+	shell_argv.push(const_cast<char *>("sh"));
 	shell_argv.push(const_cast<char *>(path));
 	for(size_t i = 0; argv[i]; ++i) {
 		if(i)
