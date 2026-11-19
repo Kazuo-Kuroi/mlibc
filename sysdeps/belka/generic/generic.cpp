@@ -823,6 +823,12 @@ int Sysdeps<Sysconf>::operator()(int num, long *ret) {
 	case _SC_SIGQUEUE_MAX:
 		*ret = 32;
 		return 0;
+	case _SC_PHYS_PAGES:
+	case _SC_AVPHYS_PAGES:
+		// No memory-count query is provided yet. Report an indeterminate
+		// value rather than the generic fallback's invented page count.
+		*ret = -1;
+		return 0;
 	default:
 		return EINVAL;
 	}
