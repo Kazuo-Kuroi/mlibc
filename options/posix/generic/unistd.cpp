@@ -1,4 +1,5 @@
 #include <array>
+#include <frg/vector.hpp>
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -151,6 +152,24 @@ int execv(const char *path, char *const argv[]) {
 	return execve(path, argv, environ);
 }
 
+// The PATH-searching exec interfaces interpret unrecognised text files.
+static int exec_path(const char *path, char *const argv[], char *const envp[]) {
+	int e = mlibc::sysdep_or_panic<Execve>(path, argv, envp);
+	__ensure(e && "sys_execve() is supposed to never return with success");
+	if(e != ENOEXEC)
+		return e;
+
+	frg::vector<char *, MemoryAllocator> shell_argv{getAllocator()};
+	shell_argv.push(argv[0] ? argv[0] : const_cast<char *>("sh"));
+	shell_argv.push(const_cast<char *>(path));
+	for(size_t i = 0; argv[i]; ++i) {
+		if(i)
+			shell_argv.push(argv[i]);
+	}
+	shell_argv.push(nullptr);
+	return mlibc::sysdep_or_panic<Execve>("/bin/sh", shell_argv.data(), envp);
+}
+
 int execvp(const char *file, char *const argv[]) {
 	return execvpe(file, argv, environ);
 }
@@ -167,10 +186,12 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
 
 	MLIBC_CHECK_OR_ENOSYS(mlibc::IsImplemented<Execve>, -1);
 
+	if(!*file) {
+		errno = ENOENT;
+		return -1;
+	}
 	if(strchr(file, '/')) {
-		int e = mlibc::sysdep_or_panic<Execve>(file, argv, envp);
-		__ensure(e && "sys_execve() is supposed to never return with success");
-		errno = e;
+		errno = exec_path(file, argv, envp);
 		return -1;
 	}
 
@@ -183,7 +204,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
 
 	size_t p = 0;
 	int res = ENOENT;
-	while(p < dirs.size()) {
+	for(;;) {
 		size_t s; // Offset of next colon or end of string.
 		if(size_t cs = dirs.find_first(':', p); cs != size_t(-1)) {
 			s = cs;
@@ -192,15 +213,16 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
 		}
 
 		frg::string<MemoryAllocator> path{getAllocator()};
-		path += dirs.sub_string(p, s - p);
-		path += "/";
+		if(s != p) {
+			path += dirs.sub_string(p, s - p);
+			path += "/";
+		}
 		path += file;
 
 		if(logExecvpeTries)
 			mlibc::infoLogger() << "mlibc: execvpe() tries '" << path.data() << "'" << frg::endlog;
 
-		int e = mlibc::sysdep_or_panic<Execve>(path.data(), argv, envp);
-		__ensure(e && "sys_execve() is supposed to never return with success");
+		int e = exec_path(path.data(), argv, envp);
 		switch(e) {
 		case ENOENT:
 		case ENOTDIR:
@@ -213,6 +235,8 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
 			return -1;
 		}
 
+		if(s == dirs.size())
+			break;
 		p = s + 1;
 	}
 
