@@ -542,6 +542,7 @@ int fd_file::reopen(const char *path, const char *mode) {
 	__buffer_size = 4096;
 	_reset();
 	_fd = fd;
+	__status_bits = 0;
 	_orientation = stream_orientation::none;
 	_mbstate = {};
 
