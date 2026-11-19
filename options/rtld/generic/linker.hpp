@@ -236,6 +236,7 @@ struct SharedObject {
 	bool symbolicResolution;
 	bool eagerBinding;
 	bool haveStaticTls;
+	bool textRelocations = false;
 
 	// vector of dependencies
 	frg::vector<SharedObject *, MemoryAllocator> dependencies;
@@ -315,6 +316,16 @@ struct Relocation {
 
 	void *destination() {
 		return reinterpret_cast<void *>(object_->baseAddress + offset_);
+	}
+
+	elf_addr addend32(bool sign_extend) {
+		if(type_ == Addend::Explicit)
+			return addend_;
+		uint32_t value;
+		memcpy(&value, destination(), sizeof(value));
+		if(sign_extend)
+			return static_cast<elf_addr>(static_cast<int64_t>(static_cast<int32_t>(value)));
+		return value;
 	}
 
 	void relocate(elf_addr addr) {

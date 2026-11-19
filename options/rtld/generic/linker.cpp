@@ -848,14 +848,9 @@ void ObjectRepository::_parseDynamic(SharedObject *object) {
 				object->eagerBinding = true;
 
 			// DF_ORIGIN: $ORIGIN is always expanded.
-			auto ignored = DF_BIND_NOW | DF_SYMBOLIC | DF_STATIC_TLS | DF_ORIGIN;
-#ifdef __riscv
-			// Work around https://sourceware.org/bugzilla/show_bug.cgi?id=24673.
-			ignored |= DF_TEXTREL;
-#else
+			auto ignored = DF_BIND_NOW | DF_SYMBOLIC | DF_STATIC_TLS | DF_ORIGIN | DF_TEXTREL;
 			if(dynamic->d_un.d_val & DF_TEXTREL)
-				mlibc::panicLogger() << "\e[31mrtld: DF_TEXTREL is unimplemented" << frg::endlog;
-#endif
+				object->textRelocations = true;
 			if(dynamic->d_un.d_val & ~ignored)
 				mlibc::infoLogger() << "\e[31mrtld: DT_FLAGS(" << frg::hex_fmt{dynamic->d_un.d_val & ~ignored}
 						<< ") is not implemented correctly!\e[39m"
@@ -948,9 +943,9 @@ void ObjectRepository::_parseDynamic(SharedObject *object) {
 		case DT_RELA: case DT_RELASZ: case DT_RELAENT: case DT_RELACOUNT:
 		case DT_REL: case DT_RELSZ: case DT_RELENT: case DT_RELCOUNT:
 		case DT_RELR: case DT_RELRSZ: case DT_RELRENT:
-#ifdef __riscv
-		case DT_TEXTREL: // Work around https://sourceware.org/bugzilla/show_bug.cgi?id=24673.
-#endif
+			break;
+		case DT_TEXTREL:
+			object->textRelocations = true;
 			break;
 		case DT_TLSDESC_PLT: case DT_TLSDESC_GOT:
 			break;
@@ -1815,6 +1810,34 @@ void Loader::_buildLinkBfs(SharedObject *root) {
 	}
 }
 
+// Only the non-writable load segments need temporary write access. Restore
+// their original permissions after all relocations, before initializers run.
+static void protectTextRelocations(SharedObject *object, bool writable) {
+	if(!object->textRelocations)
+		return;
+
+	for(size_t i = 0; i < object->phdrCount; ++i) {
+		auto phdr = reinterpret_cast<elf_phdr *>(
+			reinterpret_cast<uintptr_t>(object->phdrPointer) + i * object->phdrEntrySize);
+		if(phdr->p_type != PT_LOAD || (phdr->p_flags & PF_W) || !phdr->p_memsz)
+			continue;
+		auto misalign = phdr->p_vaddr & (mlibc::page_size - 1);
+		__ensure(phdr->p_memsz <= SIZE_MAX - misalign - (mlibc::page_size - 1));
+		auto length = (phdr->p_memsz + misalign + mlibc::page_size - 1)
+			& ~(mlibc::page_size - 1);
+		auto address = object->baseAddress + phdr->p_vaddr - misalign;
+		int prot = 0;
+		if(phdr->p_flags & PF_R)
+			prot |= PROT_READ;
+		if(phdr->p_flags & PF_X)
+			prot |= PROT_EXEC;
+		if(writable)
+			prot |= PROT_WRITE;
+		if(mlibc::sysdep_or_panic<VmProtect>(reinterpret_cast<void *>(address), length, prot))
+			__ensure(!"Cannot protect text relocation segment");
+	}
+}
+
 void Loader::linkObjects(SharedObject *root) {
 	_buildLinkBfs(root);
 	auto previousTlsMapSize = _buildTlsMaps();
@@ -1841,6 +1864,7 @@ void Loader::linkObjects(SharedObject *root) {
 
 		__ensure(!object->wasLinked);
 
+		protectTextRelocations(object, true);
 		_processStaticRelocations(object);
 		_processLazyRelocations(object);
 	}
@@ -1885,6 +1909,8 @@ void Loader::linkObjects(SharedObject *root) {
 #endif
 
 	for(auto object : _linkBfs) {
+		if(object->objectRts >= _linkRts && object->dynamic)
+			protectTextRelocations(object, false);
 		object->wasLinked = true;
 
 		if(object->inLinkMap)
@@ -2172,6 +2198,20 @@ void Loader::_processRelocations(Relocation &rel) {
 		uintptr_t symbol_addr = p ? p->virtualAddress() : 0;
 		rel.relocate(symbol_addr + rel.addend_rel());
 	} break;
+
+#if defined(__x86_64__)
+	case R_X86_64_32:
+	case R_X86_64_32S: {
+		auto value = (p ? p->virtualAddress() : 0)
+			+ rel.addend32(rel.type() == R_X86_64_32S);
+		auto word = static_cast<uint32_t>(value);
+		auto extended = rel.type() == R_X86_64_32S
+			? static_cast<elf_addr>(static_cast<int64_t>(static_cast<int32_t>(word)))
+			: static_cast<elf_addr>(word);
+		__ensure(extended == value);
+		memcpy(rel.destination(), &word, sizeof(word));
+	} break;
+#endif
 
 	case R_RELATIVE: {
 		__ensure(!rel.symbol_index());
