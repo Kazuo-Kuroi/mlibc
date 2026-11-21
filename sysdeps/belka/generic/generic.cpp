@@ -31,6 +31,8 @@
 
 using belka::sc;
 
+extern "C" [[gnu::visibility("hidden")]] void __mlibc_collect_sproc();
+
 namespace {
 
 /* Flags the kernel does not take yet, which open() carries out itself. */
@@ -1013,6 +1015,10 @@ int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusag
 		ru->ru_stime.tv_sec = si.si_stime / belka::HZ;
 		ru->ru_stime.tv_usec = si.si_stime % belka::HZ * (1000000 / belka::HZ);
 	}
+#if !MLIBC_BUILDING_RTLD
+	if (si.si_pid && (si.si_code == CLD_EXITED || si.si_code == CLD_KILLED || si.si_code == CLD_DUMPED))
+		__mlibc_collect_sproc();
+#endif
 	*ret_pid = si.si_pid;
 	return 0;
 }

@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 extern "C" Tcb *__rtld_allocateTcb();
+extern "C" void __rtld_discardTcb(Tcb *);
 
 namespace {
 
@@ -129,7 +130,16 @@ int thread_create(struct __mlibc_thread_data **__restrict thread, const struct _
 	new_tcb->returnValueType = (returns_int) ? TcbThreadReturnValue::Integer : TcbThreadReturnValue::Pointer;
 	new_tcb->isJoinable = (attr.__detachstate == __MLIBC_THREAD_CREATE_JOINABLE);
 	__atomic_store_n(&new_tcb->cancelBits, tcbCancelEnableBit, __ATOMIC_RELAXED);
-	sysdep_or_panic<Clone>(new_tcb, &tid, stack);
+	if (int error = sysdep_or_panic<Clone>(new_tcb, &tid, stack); error) {
+		if constexpr (IsImplemented<VmUnmap>) {
+			if (!attr.__stackaddr)
+				sysdep_or_panic<VmUnmap>(static_cast<char *>(new_tcb->stackAddr)
+						- new_tcb->guardSize,
+						new_tcb->stackSize + new_tcb->guardSize);
+		}
+		__rtld_discardTcb(new_tcb);
+		return error;
+	}
 	*thread = reinterpret_cast<struct __mlibc_thread_data *>(new_tcb);
 
 	__atomic_store_n(&new_tcb->tid, tid, __ATOMIC_RELAXED);

@@ -10,4 +10,5 @@
 #mesondefine MLIBC_DEBUG_ALLOCATOR
 #mesondefine MLIBC_IFUNCS_SUPPORTED
 #mesondefine MLIBC_POSIX_GETOPT
+#mesondefine MLIBC_SPROC_OPTION
 

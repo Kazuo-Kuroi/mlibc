@@ -246,6 +246,7 @@ internal_conf.set10('MLIBC_MAP_FILE_WINDOWS', false)
 internal_conf.set10('MLIBC_DEBUG_ALLOCATOR', get_option('debug_allocator'))
 internal_conf.set10('MLIBC_IFUNCS_SUPPORTED', ifuncs_supported)
 internal_conf.set10('MLIBC_POSIX_GETOPT', false)
+internal_conf.set10('MLIBC_SPROC_OPTION', false)
 
 #----------------------------------------------------------------------------------------
 # Configuration based on sysdeps.

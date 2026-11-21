@@ -226,14 +226,25 @@ int at_quick_exit(void (*func)(void)) {
 	return 0;
 }
 
+#if MLIBC_SPROC_OPTION
+extern "C" [[gnu::visibility("hidden")]] bool __mlibc_sproc_member();
+#endif
+
 void exit(int status) {
 	// for concurrent calls to exit() or quick_exit(), all but the first shall block until termination
 	// see https://austingroupbugs.net/view.php?id=1845
+#if MLIBC_SPROC_OPTION
+	bool shared = __mlibc_sproc_member();
+#endif
 	mlibc::thread_mutex_lock(&exit_mutex);
 
 	mlibc::processIsExiting.store(true, std::memory_order_relaxed);
 
 	__mlibc_do_finalize();
+#if MLIBC_SPROC_OPTION
+	if (shared)
+		mlibc::thread_mutex_unlock(&exit_mutex);
+#endif
 	mlibc::sysdep<Exit>(status);
 }
 

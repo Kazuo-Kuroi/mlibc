@@ -1433,7 +1433,7 @@ Tcb *allocateTcb() {
 	// To make sure that both the TCB and TLS data are sufficiently aligned, allocate
 	// slightly more than necessary and adjust alignment afterwards.
 	size_t alignOverhead = frg::max(alignof(Tcb), tlsMaxAlignment);
-	size_t allocSize = tlsInitialSize + sizeof(Tcb) + alignOverhead;
+	size_t allocSize = tlsInitialSize + sizeof(Tcb) + alignOverhead + 1;
 	auto allocation = reinterpret_cast<uintptr_t>(getAllocator().allocate(allocSize));
 	memset(reinterpret_cast<void *>(allocation), 0, allocSize);
 
@@ -1498,7 +1498,8 @@ Tcb *allocateTcb() {
 		}
 	}
 
-	runtimeTlsMap->tcbs.push_back(tcb_ptr);
+	runtimeTlsMap->tcbs.push_back({tcb_ptr, reinterpret_cast<void *>(allocation),
+			reinterpret_cast<unsigned char *>(allocation + allocSize - 1), false});
 
 	return tcb_ptr;
 }
@@ -2031,7 +2032,8 @@ void Loader::_publishTlsMaps(size_t previousSize) {
 	frg::unique_lock lock{*runtimeTlsMapLock};
 	size_t newSize = runtimeTlsMap->indices.size();
 
-	for (auto tcb : runtimeTlsMap->tcbs) {
+	for (auto &allocation : runtimeTlsMap->tcbs) {
+		auto tcb = allocation.tcb;
 		if (tcb->didExit)
 			continue;
 
@@ -2532,3 +2534,62 @@ void Loader::_processLazyRelocations(SharedObject *object) {
 	}
 }
 
+
+// The target retires an sproc allocation only after it cannot return to user mode.
+// All accesses to the allocation registry, including collection, hold its lock.
+namespace {
+void releaseTcbAllocation(size_t index, void (*cleanup)(Tcb *)) {
+	auto allocation = runtimeTlsMap->tcbs[index];
+	auto tcb = allocation.tcb;
+	if (cleanup)
+		cleanup(tcb);
+	for (size_t i = 0; i < tcb->dtvSize; ++i) {
+		auto object = runtimeTlsMap->indices[i];
+		if (object && object->tlsModel == TlsModel::dynamic && tcb->dtvPointers[i])
+			getAllocator().free(tcb->dtvPointers[i]);
+	}
+	getAllocator().free(tcb->dtvPointers);
+	frg::destruct(getAllocator(), tcb->localKeys);
+	tcb->~Tcb();
+	getAllocator().free(allocation.base);
+	runtimeTlsMap->tcbs[index] = runtimeTlsMap->tcbs.back();
+	runtimeTlsMap->tcbs.pop();
+}
+}
+
+extern "C" [[gnu::visibility("default")]]
+void __rtld_markSprocTcb(Tcb *tcb, unsigned char **exited) {
+	frg::unique_lock lock{*runtimeTlsMapLock};
+	for (auto &allocation : runtimeTlsMap->tcbs) {
+		if (allocation.tcb == tcb) {
+			allocation.sproc = true;
+			*exited = allocation.exited;
+			return;
+		}
+	}
+	__ensure(!"missing sproc TCB allocation");
+}
+
+extern "C" [[gnu::visibility("default")]]
+void __rtld_discardTcb(Tcb *tcb) {
+	frg::unique_lock lock{*runtimeTlsMapLock};
+	for (size_t i = 0; i < runtimeTlsMap->tcbs.size(); ++i) {
+		if (runtimeTlsMap->tcbs[i].tcb == tcb) {
+			releaseTcbAllocation(i, nullptr);
+			return;
+		}
+	}
+	__ensure(!"missing sproc TCB allocation");
+}
+
+extern "C" [[gnu::visibility("default")]]
+void __rtld_collectSprocTcbs(void (*cleanup)(Tcb *)) {
+	frg::unique_lock lock{*runtimeTlsMapLock};
+	for (size_t i = 0; i < runtimeTlsMap->tcbs.size();) {
+		auto &allocation = runtimeTlsMap->tcbs[i];
+		if (allocation.sproc && __atomic_load_n(allocation.exited, __ATOMIC_ACQUIRE))
+			releaseTcbAllocation(i, cleanup);
+		else
+			++i;
+	}
+}

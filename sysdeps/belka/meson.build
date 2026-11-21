@@ -15,6 +15,7 @@ internal_conf.set10('MLIBC_IFUNCS_SUPPORTED', false)
 # System V programs, find above all, take what follows an operand as
 # their own). getopt_long keeps GNU's permutation.
 internal_conf.set10('MLIBC_POSIX_GETOPT', true)
+internal_conf.set10('MLIBC_SPROC_OPTION', true)
 
 rtld_include_dirs += include_directories('include')
 libc_include_dirs += include_directories('include')
@@ -31,8 +32,10 @@ libc_sources += files(
 	'generic/cwd.cpp',
 	'generic/mount.cpp',
 	'generic/thread.cpp',
+	'generic/sproc.cpp',
 	host_machine.cpu_family() / 'sigtramp.S',
 	host_machine.cpu_family() / 'thread.S',
+	host_machine.cpu_family() / 'sproc.S',
 )
 
 # The ABI headers, installed from the files under abis/ rather than
@@ -63,7 +66,7 @@ if not no_headers
 		abi_headers += '../../abis/linux/' + h + '.h'
 	endforeach
 	install_headers(abi_headers, subdir: 'abi-bits')
-	install_headers('include/sys/mount.h', subdir: 'sys')
+	install_headers('include/sys/mount.h', 'include/sys/prctl.h', subdir: 'sys')
 	install_headers('include/stropts.h')
 endif
 

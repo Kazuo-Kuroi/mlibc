@@ -151,6 +151,10 @@ enum : long {
 	SYS_accept = 239,
 	SYS_aio_notify = 240,
 	SYS_aio_dup = 241,
+	SYS_sproc = 242,
+	SYS_sprocsp = 243,
+	SYS_prctl = 244,
+	SYS_procblk = 245,
 };
 
 /* context() commands. */
