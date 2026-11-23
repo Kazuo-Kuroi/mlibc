@@ -61,6 +61,7 @@ enum : long {
 	SYS_fsync = 58,
 	SYS_execve = 59,
 	SYS_umask = 60,
+	SYS_chroot = 61,
 	SYS_fcntl = 62,
 	SYS_rmdir = 79,
 	SYS_mkdir = 80,

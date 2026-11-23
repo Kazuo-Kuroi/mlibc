@@ -63,6 +63,7 @@ struct BelkaSysdepTags :
 	Truncate,
 	Chdir,
 	Fchdir,
+	Chroot,
 	Mkdir,
 	Mkfifoat,
 	Mknodat,

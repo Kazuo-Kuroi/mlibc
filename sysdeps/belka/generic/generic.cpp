@@ -690,6 +690,10 @@ int Sysdeps<Fchdir>::operator()(int fd) {
 	return sc(belka::SYS_fchdir, fd).error;
 }
 
+int Sysdeps<Chroot>::operator()(const char *path) {
+	return sc(belka::SYS_chroot, path).error;
+}
+
 int Sysdeps<Mkdir>::operator()(const char *path, mode_t mode) {
 	return sc(belka::SYS_mkdir, path, mode).error;
 }
