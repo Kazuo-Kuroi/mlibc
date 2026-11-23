@@ -110,6 +110,7 @@ struct BelkaSysdepTags :
 	SetPriority,
 	Peername,
 	Sockname,
+	Shutdown,
 	Pipe,
 	Poll,
 	Ppoll,

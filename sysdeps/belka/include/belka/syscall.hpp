@@ -163,6 +163,7 @@ enum : long {
 	SYS_recvfrom = 249,
 	SYS_getsockname = 250,
 	SYS_getpeername = 251,
+	SYS_shutdown = 252,
 };
 
 /* context() commands. */

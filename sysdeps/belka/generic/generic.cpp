@@ -1107,6 +1107,10 @@ int Sysdeps<Recvfrom>::operator()(int fd, void *buf, size_t size, int flags,
 	return 0;
 }
 
+int Sysdeps<Shutdown>::operator()(int fd, int how) {
+	return sc(belka::SYS_shutdown, fd, how).error;
+}
+
 int Sysdeps<Sockatmark>::operator()(int fd, int *out) {
 	auto result = sc(belka::SYS_sockatmark, fd);
 	if (result.error)
