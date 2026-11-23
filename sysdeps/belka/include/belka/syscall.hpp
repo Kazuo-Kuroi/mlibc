@@ -164,6 +164,8 @@ enum : long {
 	SYS_getsockname = 250,
 	SYS_getpeername = 251,
 	SYS_shutdown = 252,
+	SYS_setsockopt = 253,
+	SYS_getsockopt = 254,
 };
 
 /* context() commands. */

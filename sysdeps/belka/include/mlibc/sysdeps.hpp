@@ -111,6 +111,8 @@ struct BelkaSysdepTags :
 	Peername,
 	Sockname,
 	Shutdown,
+	SetSockopt,
+	GetSockopt,
 	Pipe,
 	Poll,
 	Ppoll,

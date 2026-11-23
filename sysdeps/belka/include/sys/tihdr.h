@@ -105,6 +105,17 @@ typedef uint32_t t_uscalar_t;
 /* PROVIDER_flag. */
 #define SENDZERO 0x0001  /* zero-length datagrams may be sent */
 
+/* MGMT_flags, and an option's status. */
+#define T_NEGOTIATE 0x0004
+#define T_CHECK 0x0008
+#define T_DEFAULT 0x0010
+#define T_SUCCESS 0x0020
+#define T_FAILURE 0x0040
+#define T_CURRENT 0x0080
+#define T_PARTSUCCESS 0x0100
+#define T_READONLY 0x0200
+#define T_NOTSUPPORT 0x0400
+
 struct T_conn_req {
 	t_scalar_t PRIM_type;
 	t_scalar_t DEST_length;
@@ -259,6 +270,36 @@ struct T_capability_ack {
 	t_uscalar_t ACCEPTOR_id;
 };
 
+/*
+ * T_OPTMGMT_REQ and T_OPTMGMT_ACK: options after them, each a t_opthdr
+ * and its value, len bytes in all, the next at len rounded up to a
+ * multiple of 4. The levels and names are the sockets' (SOL_SOCKET,
+ * IPPROTO_TCP). MGMT_flags asks T_NEGOTIATE (set these values) or
+ * T_CURRENT (report them: headers alone); each option comes back with
+ * its value and a status, and the acknowledgement's MGMT_flags is the
+ * worst of them.
+ */
+struct T_optmgmt_req {
+	t_scalar_t PRIM_type;
+	t_scalar_t OPT_length;
+	t_scalar_t OPT_offset;
+	t_scalar_t MGMT_flags;
+};
+
+struct T_optmgmt_ack {
+	t_scalar_t PRIM_type;
+	t_scalar_t OPT_length;
+	t_scalar_t OPT_offset;
+	t_scalar_t MGMT_flags;
+};
+
+struct t_opthdr {
+	t_uscalar_t len;	/* this header and the value */
+	t_uscalar_t level;
+	t_uscalar_t name;
+	t_uscalar_t status;
+};
+
 union T_primitives {
 	t_scalar_t type;
 	struct T_conn_req conn_req;
@@ -284,6 +325,8 @@ union T_primitives {
 	struct T_unitdata_req unitdata_req;
 	struct T_unitdata_ind unitdata_ind;
 	struct T_uderror_ind uderror_ind;
+	struct T_optmgmt_req optmgmt_req;
+	struct T_optmgmt_ack optmgmt_ack;
 };
 
 #endif /* _SYS_TIHDR_H */

@@ -1111,6 +1111,16 @@ int Sysdeps<Shutdown>::operator()(int fd, int how) {
 	return sc(belka::SYS_shutdown, fd, how).error;
 }
 
+int Sysdeps<SetSockopt>::operator()(int fd, int layer, int number,
+		const void *buffer, socklen_t size) {
+	return sc(belka::SYS_setsockopt, fd, layer, number, buffer, size).error;
+}
+
+int Sysdeps<GetSockopt>::operator()(int fd, int layer, int number,
+		void *__restrict buffer, socklen_t *__restrict size) {
+	return sc(belka::SYS_getsockopt, fd, layer, number, buffer, size).error;
+}
+
 int Sysdeps<Sockatmark>::operator()(int fd, int *out) {
 	auto result = sc(belka::SYS_sockatmark, fd);
 	if (result.error)
