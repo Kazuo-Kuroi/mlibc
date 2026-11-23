@@ -31,6 +31,7 @@ libc_sources += files(
 	'generic/signal.cpp',
 	'generic/cwd.cpp',
 	'generic/mount.cpp',
+	'generic/stropts.cpp',
 	'generic/thread.cpp',
 	'generic/sproc.cpp',
 	host_machine.cpu_family() / 'sigtramp.S',

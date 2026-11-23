@@ -65,6 +65,8 @@ enum : long {
 	SYS_rmdir = 79,
 	SYS_mkdir = 80,
 	SYS_getdents = 81,
+	SYS_getmsg = 85,
+	SYS_putmsg = 86,
 	SYS_poll = 87,
 	SYS_lstat = 88,
 	SYS_symlink = 89,
@@ -155,6 +157,8 @@ enum : long {
 	SYS_sprocsp = 243,
 	SYS_prctl = 244,
 	SYS_procblk = 245,
+	SYS_getpmsg = 246,
+	SYS_putpmsg = 247,
 };
 
 /* context() commands. */
