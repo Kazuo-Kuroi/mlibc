@@ -67,7 +67,8 @@ if not no_headers
 		abi_headers += '../../abis/linux/' + h + '.h'
 	endforeach
 	install_headers(abi_headers, subdir: 'abi-bits')
-	install_headers('include/sys/dlpi.h', 'include/sys/mount.h', 'include/sys/prctl.h',
+	install_headers('include/sys/dlpi.h', 'include/sys/ipconf.h',
+		'include/sys/mount.h', 'include/sys/prctl.h',
 		subdir: 'sys')
 	install_headers('include/stropts.h')
 endif
