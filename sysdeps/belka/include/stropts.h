@@ -87,6 +87,7 @@ extern "C" {
 #define MOREDATA 2
 
 #define INFTIM (-1)
+#define MUXID_ALL (-1)
 
 struct strbuf {
 	int maxlen;
