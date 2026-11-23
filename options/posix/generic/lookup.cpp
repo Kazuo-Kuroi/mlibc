@@ -17,383 +17,349 @@
 #include <frg/scope_exit.hpp>
 #include <mlibc/all-sysdeps.hpp>
 #include <time.h>
+#include <fcntl.h>
 
 namespace mlibc {
 
 namespace {
-	constexpr unsigned short RETURN_NOERROR [[maybe_unused]] = 0x0;
-	constexpr unsigned short RETURN_NXDOMAIN = 0x3;
+	constexpr unsigned int RCODE_SERVFAIL = 2;
+	constexpr unsigned int RCODE_NXDOMAIN = 3;
 
 	constexpr unsigned int RECORD_A = 1;
 	constexpr unsigned int RECORD_CNAME = 5;
 	constexpr unsigned int RECORD_PTR = 12;
 	constexpr unsigned int RECORD_AAAA = 28;
+	constexpr unsigned int CLASS_IN = 1;
 
-	int get_poll_timeout(struct timespec *original_time) {
-		struct timespec current_time;
-		if (int e = mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &current_time.tv_sec, &current_time.tv_nsec); e)
-			mlibc::panicLogger() << "mlibc: sys_clock_get() failed with error code: " << e << frg::endlog;
+	constexpr uint16_t FLAG_QR = 0x8000;
+	constexpr uint16_t FLAG_TC = 0x0200;
+	constexpr uint16_t FLAG_RD = 0x0100;
 
-		current_time.tv_sec -= original_time->tv_sec;
-		current_time.tv_nsec -= original_time->tv_nsec;
-		if (current_time.tv_nsec < 0) {
-			--current_time.tv_sec;
-			current_time.tv_nsec = 1000000000 + current_time.tv_nsec;
+	// A reply over UDP, without EDNS, is 512 bytes at most (RFC 1035 4.2.1).
+	constexpr size_t DNS_MAXUDP = 512;
+	constexpr size_t DNS_HEADER = 12;
+	constexpr int DNS_TRIES = 2;
+	constexpr int DNS_TIMEOUT_MS = 2500;	// each try
+
+	using string = frg::string<MemoryAllocator>;
+
+	uint16_t get16(const uint8_t *p) {
+		return static_cast<uint16_t>((p[0] << 8) | p[1]);
+	}
+
+	// A query's ID: unpredictable, from /dev/urandom, so that a reply
+	// cannot easily be forged; failing that, from the clock.
+	uint16_t new_id() {
+		uint16_t id = 0;
+		int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+		if (fd >= 0) {
+			ssize_t n = read(fd, &id, sizeof(id));
+			close(fd);
+			if (n == sizeof(id))
+				return id;
 		}
+		struct timespec ts;
+		if (!mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &ts.tv_sec, &ts.tv_nsec))
+			id = static_cast<uint16_t>(ts.tv_nsec ^ (ts.tv_nsec >> 16));
+		return static_cast<uint16_t>(id ^ getpid());
+	}
 
-		// poll timeout unit is msec
-		// default timeout is 5 seconds
-		// TODO resolv.conf can specify a timeout and we ignore it currently.
-		return frg::max(5000l - (current_time.tv_sec * 1000 + current_time.tv_nsec / 1000000), time_t{0});
+	// A query for name, type qtype, class IN, recursion desired. False if
+	// name is no domain name: a label empty or longer than 63 bytes, or
+	// the whole longer than 253.
+	bool make_query(string &q, uint16_t id, const char *name, uint16_t qtype) {
+		size_t len = strlen(name);
+		if (len > 0 && name[len - 1] == '.')
+			len--;
+		if (len == 0 || len > 253)
+			return false;
+
+		uint8_t hdr[DNS_HEADER] = {
+			static_cast<uint8_t>(id >> 8), static_cast<uint8_t>(id),
+			FLAG_RD >> 8, 0, 0, 1, 0, 0, 0, 0, 0, 0
+		};
+		q.resize(0);
+		for (size_t i = 0; i < DNS_HEADER; i++)
+			q += static_cast<char>(hdr[i]);
+		for (size_t pos = 0; pos < len; ) {
+			size_t end = pos;
+			while (end < len && name[end] != '.')
+				end++;
+			if (end == pos || end - pos > 63)
+				return false;
+			q += static_cast<char>(end - pos);
+			q += frg::string_view{name + pos, end - pos};
+			pos = end + 1;
+		}
+		q += static_cast<char>(0);
+		q += static_cast<char>(qtype >> 8);
+		q += static_cast<char>(qtype & 0xFF);
+		q += static_cast<char>(0);
+		q += static_cast<char>(CLASS_IN);
+		return true;
+	}
+
+	// The name at off in msg (len bytes), its compression pointers
+	// followed, into *out if out is not null, its labels joined by dots.
+	// The offset just past it where it starts, or -1 if it is malformed:
+	// running past the message, a pointer loop, or longer than 255.
+	long read_name(const uint8_t *msg, size_t len, size_t off, string *out) {
+		long next = -1;
+		size_t total = 0;
+		int jumps = 0;
+
+		if (out)
+			out->resize(0);
+		for (;;) {
+			if (off >= len)
+				return -1;
+			uint8_t c = msg[off];
+			if ((c & 0xC0) == 0xC0) {
+				if (off + 1 >= len || ++jumps > 64)
+					return -1;
+				if (next < 0)
+					next = static_cast<long>(off + 2);
+				off = (static_cast<size_t>(c & 0x3F) << 8) | msg[off + 1];
+				continue;
+			}
+			if ((c & 0xC0) != 0)
+				return -1;	// the extended label types
+			if (c == 0) {
+				if (next < 0)
+					next = static_cast<long>(off + 1);
+				return next;
+			}
+			if (off + 1 + c > len || (total += c + 1u) > 255)
+				return -1;
+			if (out) {
+				if (out->size())
+					*out += '.';
+				*out += frg::string_view{reinterpret_cast<const char *>(msg + off + 1), c};
+			}
+			off += 1 + c;
+		}
+	}
+
+	// Whether the reply's question (at DNS_HEADER) is the query's, names
+	// compared without regard to case.
+	bool same_question(const uint8_t *r, size_t rlen, const string &q) {
+		size_t qlen = q.size() - DNS_HEADER;
+		auto qp = reinterpret_cast<const uint8_t *>(q.data()) + DNS_HEADER;
+		if (rlen < DNS_HEADER + qlen)
+			return false;
+		for (size_t i = 0; i < qlen; i++) {
+			uint8_t a = r[DNS_HEADER + i], b = qp[i];
+			if (a != b && tolower(a) != tolower(b))
+				return false;
+		}
+		return true;
+	}
+
+	// The time left of ms since start, in ms; 0 if none.
+	int time_left(const struct timespec &start, int ms) {
+		struct timespec now;
+		if (int e = mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &now.tv_sec, &now.tv_nsec); e)
+			mlibc::panicLogger() << "mlibc: sys_clock_get() failed with error code: " << e << frg::endlog;
+		long long gone = (now.tv_sec - start.tv_sec) * 1000LL +
+			(now.tv_nsec - start.tv_nsec) / 1000000;
+		return gone >= ms ? 0 : static_cast<int>(ms - gone);
+	}
+
+	// The query q to the name server (resolv.conf's first, or 127.0.0.1)
+	// and its reply into r (DNS_MAXUDP bytes), its length in *rlen: one
+	// with the query's ID and question, from the server's address and
+	// port. 0, or -EAI_AGAIN if none came, -EAI_SYSTEM.
+	int exchange(const string &q, uint8_t *r, size_t *rlen) {
+		struct sockaddr_in sin = {};
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(53);
+
+		mlibc::service_result serv_buf{getAllocator()};
+		if (mlibc::lookup_serv_by_name(serv_buf, "domain", IPPROTO_UDP, SOCK_DGRAM, 0) > 0)
+			sin.sin_port = htons(serv_buf[0].port);
+
+		auto nameserver = get_nameserver();
+		if (!inet_aton(nameserver ? nameserver->name.data() : "127.0.0.1", &sin.sin_addr))
+			return -EAI_SYSTEM;
+
+		int fd = socket(AF_INET, SOCK_DGRAM, 0);
+		if (fd < 0)
+			return -EAI_SYSTEM;
+		frg::scope_exit close_fd{[&] {
+			close(fd);
+		}};
+
+		for (int t = 0; t < DNS_TRIES; t++) {
+			if (sendto(fd, q.data(), q.size(), 0, reinterpret_cast<struct sockaddr *>(&sin),
+					sizeof(sin)) != static_cast<ssize_t>(q.size()))
+				return -EAI_SYSTEM;
+
+			struct timespec start;
+			if (int e = mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &start.tv_sec, &start.tv_nsec); e)
+				mlibc::panicLogger() << "mlibc: sys_clock_get() failed with error code: " << e << frg::endlog;
+			int left;
+			while ((left = time_left(start, DNS_TIMEOUT_MS)) > 0) {
+				struct pollfd pfd = {fd, POLLIN, 0};
+				int ready = poll(&pfd, 1, left);
+				if (ready < 0 && errno != EINTR)
+					return -EAI_SYSTEM;
+				if (ready <= 0)
+					continue;
+
+				struct sockaddr_in from = {};
+				socklen_t fromlen = sizeof(from);
+				ssize_t n = recvfrom(fd, r, DNS_MAXUDP, 0,
+						reinterpret_cast<struct sockaddr *>(&from), &fromlen);
+				if (n < 0) {
+					if (errno == EINTR || errno == EAGAIN)
+						continue;
+					if (errno == ECONNREFUSED)
+						break;	// nobody there: try again, then give up
+					return -EAI_SYSTEM;
+				}
+				// Not the server's, or not the reply to this query: ignored.
+				if (from.sin_addr.s_addr != sin.sin_addr.s_addr ||
+						from.sin_port != sin.sin_port)
+					continue;
+				if (static_cast<size_t>(n) < DNS_HEADER || r[0] != static_cast<uint8_t>(q[0]) ||
+						r[1] != static_cast<uint8_t>(q[1]) || !(get16(r + 2) & FLAG_QR) ||
+						get16(r + 4) != 1 || !same_question(r, n, q))
+					continue;
+				*rlen = static_cast<size_t>(n);
+				return 0;
+			}
+		}
+		return -EAI_AGAIN;
+	}
+
+	// The reply's answers, from just after its one question: fn(type,
+	// owner, rdata offset, rdata length) for each of class IN. 0, or
+	// -EAI_NONAME for NXDOMAIN, -EAI_AGAIN for SERVFAIL or a truncated
+	// reply with no answers, -EAI_FAIL for another error or a malformed
+	// reply.
+	template<typename F>
+	int each_answer(const uint8_t *r, size_t rlen, F fn) {
+		uint16_t flags = get16(r + 2);
+		unsigned int rcode = flags & 0xF;
+		if (rcode == RCODE_NXDOMAIN)
+			return -EAI_NONAME;
+		if (rcode == RCODE_SERVFAIL)
+			return -EAI_AGAIN;
+		if (rcode != 0)
+			return -EAI_FAIL;
+
+		unsigned int ancount = get16(r + 6);
+		if ((flags & FLAG_TC) && ancount == 0)
+			return -EAI_AGAIN;
+		long off = read_name(r, rlen, DNS_HEADER, nullptr);
+		if (off < 0 || static_cast<size_t>(off) + 4 > rlen)
+			return -EAI_FAIL;
+		off += 4;
+
+		string owner{getAllocator()};
+		for (unsigned int i = 0; i < ancount; i++) {
+			off = read_name(r, rlen, static_cast<size_t>(off), &owner);
+			if (off < 0 || static_cast<size_t>(off) + 10 > rlen)
+				return (flags & FLAG_TC) ? 0 : -EAI_FAIL;
+			const uint8_t *rr = r + off;
+			unsigned int type = get16(rr), cls = get16(rr + 2), rdlen = get16(rr + 8);
+			size_t rdata = static_cast<size_t>(off) + 10;
+			if (rdata + rdlen > rlen)
+				return (flags & FLAG_TC) ? 0 : -EAI_FAIL;
+			if (cls == CLASS_IN)
+				fn(type, owner, rdata, rdlen);
+			off = static_cast<long>(rdata + rdlen);
+		}
+		return 0;
 	}
 } // namespace
 
-static frg::string<MemoryAllocator> read_dns_name(char *buf, char *&it) {
-	frg::string<MemoryAllocator> res{getAllocator()};
-	while (true) {
-		char code = *it++;
-		if ((code & 0xC0) == 0xC0) {
-			// pointer
-			uint16_t offset = (static_cast<uint8_t>(code & 0x3F) << 8) | static_cast<uint8_t>(*it++);
-			auto offset_it = buf + offset;
-			return res + read_dns_name(buf, offset_it);
-		} else if (!(code & 0xC0)) {
-			if (!code)
-				break;
-
-			for (int i = 0; i < code; i++)
-				res += (*it++);
-
-			if (*it)
-				res += '.';
-		} else {
-			break;
-		}
-	}
-
-	return res;
-}
-
 int lookup_name_dns(struct lookup_result &buf, const char *name,
 		frg::string<MemoryAllocator> &canon_name, int family) {
-	frg::string<MemoryAllocator> request{getAllocator()};
+	uint16_t qtype = family == AF_INET6 ? RECORD_AAAA : RECORD_A;
+	string q{getAllocator()};
+	if (!make_query(q, new_id(), name, qtype))
+		return -EAI_NONAME;
 
-	int num_q = 1;
-	struct dns_header header;
-	header.identification = htons(123);
-	header.flags = htons(0x100);
-	header.no_q = htons(num_q);
-	header.no_ans = htons(0);
-	header.no_auths = htons(0);
-	header.no_additional = htons(0);
+	uint8_t r[DNS_MAXUDP];
+	size_t rlen;
+	if (int e = exchange(q, r, &rlen); e)
+		return e;
 
-	request.resize(sizeof(header));
-	memcpy(request.data(), &header, sizeof(header));
-
-	const char *end = name;
-	while (*end != '\0') {
-		end = strchrnul(name, '.');
-		size_t length = end - name;
-		frg::string_view substring{name, length};
-		name += length + 1;
-		request += char(length);
-		request += substring;
-	}
-
-	request += char(0);
-	// set question type to fetch A or AAAA records
-	uint16_t qtype = RECORD_A;
-	if (family == AF_INET6)
-		qtype = RECORD_AAAA;
-
-	request += qtype >> 8;
-	request += qtype & 0xFF;
-	// set CLASS to IN
-	request += 0;
-	request += 1;
-
-	mlibc::service_result serv_buf{getAllocator()};
-	int serv_count = mlibc::lookup_serv_by_name(serv_buf, "domain", IPPROTO_UDP, SOCK_DGRAM, 0);
-	if (serv_count < 0) {
-		mlibc::infoLogger() << "mlibc: could not resolve DNS service" << frg::endlog;
-		return -EAI_SERVICE;
-	}
-
-	struct sockaddr_in sin = {};
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(serv_buf[0].port);
-
-	auto nameserver = get_nameserver();
-	if (!inet_aton(nameserver ? nameserver->name.data() : "127.0.0.1", &sin.sin_addr)) {
-		mlibc::infoLogger() << "lookup_name_dns(): inet_aton() failed!" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
-
-	int fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (fd < 0) {
-		mlibc::infoLogger() << "lookup_name_dns(): socket() failed" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
-
-	frg::scope_exit close_fd{[&] {
-		close(fd);
-	}};
-
-	size_t sent = sendto(fd, request.data(), request.size(), 0,
-			(struct sockaddr*)&sin, sizeof(sin));
-	if (sent != request.size()) {
-		mlibc::infoLogger() << "lookup_name_dns(): sendto() failed to send everything" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
-
-	char response[512];
-	int num_ans = 0;
-	int fds_ready;
-	struct timespec start_time;
-
-	struct pollfd pollfd;
-	pollfd.fd = fd;
-	pollfd.events = POLLIN;
-
-	if (int e = mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &start_time.tv_sec, &start_time.tv_nsec); e)
-		mlibc::panicLogger() << "mlibc: sys_clock_get() failed with error code: " << e << frg::endlog;
-
-	while ((fds_ready = poll(&pollfd, 1, get_poll_timeout(&start_time))) > 0) {
-		ssize_t rlen = recvfrom(fd, response, sizeof(response), 0, nullptr, nullptr);
-		if (rlen < 0) {
-			mlibc::infoLogger() << "lookup_name_dns(): recvfrom() failed" << frg::endlog;
-			return -EAI_SYSTEM;
-		}
-
-		if ((size_t)rlen < sizeof(struct dns_header))
-			continue;
-
-		auto response_header = reinterpret_cast<struct dns_header*>(response);
-		if (response_header->identification != header.identification)
-			return -EAI_FAIL;
-
-		if ((ntohs(response_header->flags) & 0xF) == RETURN_NXDOMAIN)
-			return -EAI_NONAME;
-
-		auto it = response + sizeof(struct dns_header);
-		for (int i = 0; i < ntohs(response_header->no_q); i++) {
-			auto dns_name = read_dns_name(response, it);
-			(void) dns_name;
-			it += 4;
-		}
-
-		for (int i = 0; i < ntohs(response_header->no_ans); i++) {
-			struct dns_addr_buf buffer;
-			auto dns_name = read_dns_name(response, it);
-
-			uint16_t rr_type = (static_cast<uint8_t>(it[0]) << 8) | static_cast<uint8_t>(it[1]);
-			uint16_t rr_class = (static_cast<uint8_t>(it[2]) << 8) | static_cast<uint8_t>(it[3]);
-			uint16_t rr_length = (static_cast<uint8_t>(it[8]) << 8) | static_cast<uint8_t>(it[9]);
-			it += 10;
-			(void)rr_class;
-
-			switch (rr_type) {
-				case RECORD_A:
-					if (family != AF_UNSPEC && family != AF_INET) {
-						it += rr_length;
-						continue;
-					}
-
-					memcpy(buffer.addr, it, rr_length);
-					it += rr_length;
-					buffer.family = AF_INET;
-					buffer.name = std::move(dns_name);
-					buf.buf.push(std::move(buffer));
-					break;
-				case RECORD_AAAA:
-					if (family != AF_UNSPEC && family != AF_INET6) {
-						it += rr_length;
-						continue;
-					}
-
-					memcpy(buffer.addr, it, rr_length);
-					it += rr_length;
-					buffer.family = AF_INET6;
-					buffer.name = std::move(dns_name);
-					buf.buf.push(std::move(buffer));
-					break;
-				case RECORD_CNAME:
-					canon_name = read_dns_name(response, it);
-					buf.aliases.push(std::move(dns_name));
-					break;
-				default:
-					mlibc::infoLogger() << "lookup_name_dns: unknown rr type "
-						<< rr_type << frg::endlog;
-					it += rr_length;
-					break;
+	int e = each_answer(r, rlen, [&] (unsigned int type, const string &owner,
+			size_t rdata, unsigned int rdlen) {
+		if (type == RECORD_CNAME) {
+			string target{getAllocator()};
+			if (read_name(r, rlen, rdata, &target) >= 0) {
+				buf.aliases.push(owner);
+				canon_name = std::move(target);
 			}
+			return;
 		}
-		num_ans += ntohs(response_header->no_ans);
-
-		if (num_ans >= num_q)
-			break;
-	}
-
-	if (fds_ready == 0)
-		return -EAI_AGAIN;
-
+		if ((type != RECORD_A || rdlen != 4) && (type != RECORD_AAAA || rdlen != 16))
+			return;
+		if (type != qtype)
+			return;
+		struct dns_addr_buf a;
+		memcpy(a.addr, r + rdata, rdlen);
+		a.family = type == RECORD_A ? AF_INET : AF_INET6;
+		a.name = owner;
+		buf.buf.push(std::move(a));
+	});
+	if (e)
+		return e;
 	return buf.buf.size();
 }
 
 int lookup_addr_dns(frg::span<char> name, frg::array<uint8_t, 16> &addr, int family) {
-	frg::string<MemoryAllocator> request{getAllocator()};
-
-	int num_q = 1;
-	struct dns_header header;
-	header.identification = htons(123);
-	header.flags = htons(0x100);
-	header.no_q = htons(num_q);
-	header.no_ans = htons(0);
-	header.no_auths = htons(0);
-	header.no_additional = htons(0);
-
-	request.resize(sizeof(header));
-	memcpy(request.data(), &header, sizeof(header));
-
-	char addr_str[64];
-	if(!inet_ntop(family, addr.data(), addr_str, sizeof(addr_str))) {
-		switch(errno) {
-			case EAFNOSUPPORT:
-				return -EAI_FAMILY;
-			case ENOSPC:
-				return -EAI_OVERFLOW;
-			default:
-				return -EAI_FAIL;
+	// The address's name under in-addr.arpa or ip6.arpa: its bytes, or
+	// its nibbles, last first.
+	char rev[80];
+	size_t n = 0;
+	if (family == AF_INET) {
+		for (int i = 3; i >= 0; i--)
+			n += snprintf(rev + n, sizeof(rev) - n, "%u.", addr[i]);
+		snprintf(rev + n, sizeof(rev) - n, "in-addr.arpa");
+	} else if (family == AF_INET6) {
+		static const char hex[] = "0123456789abcdef";
+		for (int i = 15; i >= 0; i--) {
+			rev[n++] = hex[addr[i] & 0xF];
+			rev[n++] = '.';
+			rev[n++] = hex[addr[i] >> 4];
+			rev[n++] = '.';
 		}
-	}
-	frg::string<MemoryAllocator> req_str{getAllocator(), addr_str};
-	req_str += ".in-addr.arpa";
-
-	frg::string_view req_view{req_str.data(), req_str.size()};
-	size_t ptr = 0;
-	do {
-		size_t next = req_view.find_first('.', ptr);
-		size_t length = next != (size_t)-1 ? next - ptr : req_view.size() - ptr;
-		frg::string_view substring = req_view.sub_string(ptr, length);
-		request += char(length);
-		request += substring;
-		ptr = next + 1;
-	} while(ptr != 0);
-
-	request += char(0);
-	// set question type to fetch PTR records
-	request += 0;
-	request += 12;
-	// set CLASS to IN
-	request += 0;
-	request += 1;
-
-	mlibc::service_result serv_buf{getAllocator()};
-	int serv_count = mlibc::lookup_serv_by_name(serv_buf, "domain", IPPROTO_UDP, SOCK_DGRAM, 0);
-	if (serv_count < 0) {
-		mlibc::infoLogger() << "mlibc: could not resolve DNS service" << frg::endlog;
-		return -EAI_SERVICE;
+		snprintf(rev + n, sizeof(rev) - n, "ip6.arpa");
+	} else {
+		return -EAI_FAMILY;
 	}
 
-	struct sockaddr_in sin = {};
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(serv_buf[0].port);
+	string q{getAllocator()};
+	if (!make_query(q, new_id(), rev, RECORD_PTR))
+		return -EAI_FAIL;
 
-	auto nameserver = get_nameserver();
-	if (!inet_aton(nameserver ? nameserver->name.data() : "127.0.0.1", &sin.sin_addr)) {
-		mlibc::infoLogger() << "lookup_name_dns(): inet_aton() failed!" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
+	uint8_t r[DNS_MAXUDP];
+	size_t rlen;
+	if (int e = exchange(q, r, &rlen); e)
+		return e;
 
-	int fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (fd < 0) {
-		mlibc::infoLogger() << "lookup_name_dns(): socket() failed" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
-
-	frg::scope_exit close_fd{[&] {
-		close(fd);
-	}};
-
-	size_t sent = sendto(fd, request.data(), request.size(), 0,
-			(struct sockaddr*)&sin, sizeof(sin));
-
-	if (sent != request.size()) {
-		mlibc::infoLogger() << "lookup_name_dns(): sendto() failed to send everything" << frg::endlog;
-		return -EAI_SYSTEM;
-	}
-
-	char response[256];
-	int num_ans = 0;
-	int fds_ready;
-	struct timespec start_time;
-
-	struct pollfd pollfd;
-	pollfd.fd = fd;
-	pollfd.events = POLLIN;
-
-	if (int e = mlibc::sysdep<ClockGet>(CLOCK_MONOTONIC, &start_time.tv_sec, &start_time.tv_nsec); e)
-		mlibc::panicLogger() << "mlibc: sys_clock_get() failed with error code: " << e << frg::endlog;
-
-	while ((fds_ready = poll(&pollfd, 1, get_poll_timeout(&start_time))) > 0) {
-		ssize_t rlen = recvfrom(fd, response, 256, 0, nullptr, nullptr);
-		if (rlen < 0) {
-			mlibc::infoLogger() << "lookup_name_dns(): recvfrom() failed" << frg::endlog;
-			return -EAI_SYSTEM;
-		}
-
-		if ((size_t)rlen < sizeof(struct dns_header))
-			continue;
-
-		auto response_header = reinterpret_cast<struct dns_header*>(response);
-		if (response_header->identification != header.identification)
-			return -EAI_FAIL;
-
-		auto it = response + sizeof(struct dns_header);
-		for (int i = 0; i < ntohs(response_header->no_q); i++) {
-			auto dns_name = read_dns_name(response, it);
-			(void) dns_name;
-			it += 4;
-		}
-
-		for (int i = 0; i < ntohs(response_header->no_ans); i++) {
-			struct dns_addr_buf buffer;
-			auto dns_name = read_dns_name(response, it);
-
-			uint16_t rr_type = (static_cast<uint8_t>(it[0]) << 8) | static_cast<uint8_t>(it[1]);
-			uint16_t rr_class = (static_cast<uint8_t>(it[2]) << 8) | static_cast<uint8_t>(it[3]);
-			uint16_t rr_length = (static_cast<uint8_t>(it[8]) << 8) | static_cast<uint8_t>(it[9]);
-			it += 10;
-			(void)rr_class;
-
-			(void)dns_name;
-
-			switch (rr_type) {
-				case RECORD_PTR: {
-					auto ptr_name = read_dns_name(response, it);
-					if (ptr_name.size() >= name.size())
-						return -EAI_OVERFLOW;
-					std::copy(ptr_name.begin(), ptr_name.end(), name.data());
-					name.data()[ptr_name.size()] = '\0';
-					return 1;
-				}
-				default:
-					mlibc::infoLogger() << "lookup_addr_dns: unknown rr type "
-						<< rr_type << frg::endlog;
-					it += rr_length;
-					break;
-			}
-			num_ans += ntohs(response_header->no_ans);
-
-			if (num_ans >= num_q)
-				break;
-		}
-	}
-
-	if (fds_ready == 0)
-		return -EAI_AGAIN;
-
-	return 0;
+	string ptr{getAllocator()};
+	int found = 0;
+	int e = each_answer(r, rlen, [&] (unsigned int type, const string &,
+			size_t rdata, unsigned int) {
+		if (type == RECORD_PTR && !found && read_name(r, rlen, rdata, &ptr) >= 0)
+			found = 1;
+	});
+	if (e == -EAI_NONAME)
+		return 0;
+	if (e)
+		return e;
+	if (!found)
+		return 0;
+	if (ptr.size() >= name.size())
+		return -EAI_OVERFLOW;
+	memcpy(name.data(), ptr.data(), ptr.size());
+	name.data()[ptr.size()] = '\0';
+	return 1;
 }
 
 int lookup_name_hosts(struct lookup_result &buf, const char *name,
