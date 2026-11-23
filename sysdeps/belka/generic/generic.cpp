@@ -580,9 +580,27 @@ int Sysdeps<SetPriority>::operator()(int which, id_t who, int prio) {
 	return sc(belka::SYS_nice, prio - cur).error;
 }
 
-/* No sockets yet: nothing is a socket. */
-int Sysdeps<Peername>::operator()(int, struct sockaddr *, socklen_t, socklen_t *) {
-	return ENOTSOCK;
+/*
+ * A socket's own address and its peer's: the kernel copies out as much
+ * as fits and gives the whole length.
+ */
+static int sockname(long call, int fd, struct sockaddr *addr, socklen_t max,
+		socklen_t *actual) {
+	socklen_t len = max;
+	if (int e = sc(call, fd, addr, &len).error; e)
+		return e;
+	*actual = len;
+	return 0;
+}
+
+int Sysdeps<Peername>::operator()(int fd, struct sockaddr *addr, socklen_t max,
+		socklen_t *actual) {
+	return sockname(belka::SYS_getpeername, fd, addr, max, actual);
+}
+
+int Sysdeps<Sockname>::operator()(int fd, struct sockaddr *addr, socklen_t max,
+		socklen_t *actual) {
+	return sockname(belka::SYS_getsockname, fd, addr, max, actual);
 }
 
 /*
@@ -1070,10 +1088,9 @@ int Sysdeps<Socketpair>::operator()(int domain, int type, int proto, int *fds) {
 }
 
 int Sysdeps<Sendto>::operator()(int fd, const void *buf, size_t size, int flags,
-		const struct sockaddr *addr, socklen_t, ssize_t *length) {
-	if (addr)
-		return EISCONN;
-	auto result = sc(belka::SYS_send, fd, buf, size, flags);
+		const struct sockaddr *addr, socklen_t addrlen, ssize_t *length) {
+	auto result = sc(belka::SYS_sendto, fd, buf, size, flags, addr,
+			addr ? addrlen : 0);
 	if (result.error)
 		return result.error;
 	*length = result.value;
@@ -1082,11 +1099,10 @@ int Sysdeps<Sendto>::operator()(int fd, const void *buf, size_t size, int flags,
 
 int Sysdeps<Recvfrom>::operator()(int fd, void *buf, size_t size, int flags,
 		struct sockaddr *addr, socklen_t *addrlen, ssize_t *length) {
-	auto result = sc(belka::SYS_recv, fd, buf, size, flags);
+	auto result = sc(belka::SYS_recvfrom, fd, buf, size, flags,
+			addrlen ? addr : nullptr, addr ? addrlen : nullptr);
 	if (result.error)
 		return result.error;
-	if (addr && addrlen)
-		*addrlen = 0;
 	*length = result.value;
 	return 0;
 }

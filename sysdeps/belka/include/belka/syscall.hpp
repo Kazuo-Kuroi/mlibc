@@ -159,6 +159,10 @@ enum : long {
 	SYS_procblk = 245,
 	SYS_getpmsg = 246,
 	SYS_putpmsg = 247,
+	SYS_sendto = 248,
+	SYS_recvfrom = 249,
+	SYS_getsockname = 250,
+	SYS_getpeername = 251,
 };
 
 /* context() commands. */
