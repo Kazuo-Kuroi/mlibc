@@ -934,6 +934,23 @@ int Sysdeps<SetEgid>::operator()(gid_t egid) {
 	return sc(belka::SYS_setegid, egid).error;
 }
 
+/* The three ids at once (Belka's 256 to 259, as HP-UX's); -1 keeps one. */
+int Sysdeps<SetResuid>::operator()(uid_t ruid, uid_t euid, uid_t suid) {
+	return sc(belka::SYS_setresuid, ruid, euid, suid).error;
+}
+
+int Sysdeps<SetResgid>::operator()(gid_t rgid, gid_t egid, gid_t sgid) {
+	return sc(belka::SYS_setresgid, rgid, egid, sgid).error;
+}
+
+int Sysdeps<GetResuid>::operator()(uid_t *ruid, uid_t *euid, uid_t *suid) {
+	return sc(belka::SYS_getresuid, ruid, euid, suid).error;
+}
+
+int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
+	return sc(belka::SYS_getresgid, rgid, egid, sgid).error;
+}
+
 /* getgroups(0, ...) returns the number of groups alone. */
 int Sysdeps<GetGroups>::operator()(size_t size, gid_t *list, int *ret) {
 	auto r = sc(belka::SYS_getgroups, size, list);

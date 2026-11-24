@@ -168,6 +168,10 @@ enum : long {
 	SYS_setsockopt = 253,
 	SYS_getsockopt = 254,
 	SYS_getentropy = 255,
+	SYS_setresuid = 256,
+	SYS_setresgid = 257,
+	SYS_getresuid = 258,
+	SYS_getresgid = 259,
 };
 
 /* context() commands. */
