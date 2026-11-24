@@ -101,6 +101,7 @@ struct BelkaSysdepTags :
 	AioReturn,
 	AioSuspend,
 	MsgSend,
+	MsgRecv,
 	Statvfs,
 	Fstatvfs,
 	Utimensat,

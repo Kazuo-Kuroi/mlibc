@@ -28,6 +28,7 @@
 #include <belka/syscall.hpp>
 #include <mlibc/all-sysdeps.hpp>
 #include <mlibc/debug.hpp>
+#include <mlibc/allocator.hpp>
 
 using belka::sc;
 
@@ -1138,8 +1139,81 @@ int Sysdeps<Sockatmark>::operator()(int fd, int *out) {
 	return 0;
 }
 
-int Sysdeps<MsgSend>::operator()(int, const struct msghdr *, int, ssize_t *) {
-	return EBADF;
+/*
+ * sendmsg and recvmsg, over sendto and recvfrom: Belka has no calls of
+ * their own, and no ancillary data. A message of several pieces is
+ * gathered into one buffer, or scattered from one, so that a datagram
+ * stays one datagram. Sending ancillary data is EOPNOTSUPP; none is
+ * ever received (msg_controllen 0), and msg_flags is 0.
+ */
+static int msg_total(const struct msghdr *hdr, size_t *total) {
+	size_t n = 0;
+	if (hdr->msg_iovlen < 0 || hdr->msg_iovlen > IOV_MAX)
+		return EMSGSIZE;
+	for (int i = 0; i < hdr->msg_iovlen; i++) {
+		if (hdr->msg_iov[i].iov_len > SSIZE_MAX - n)
+			return EINVAL;
+		n += hdr->msg_iov[i].iov_len;
+	}
+	*total = n;
+	return 0;
 }
 
+int Sysdeps<MsgSend>::operator()(int fd, const struct msghdr *hdr, int flags,
+		ssize_t *length) {
+	size_t total;
+	if (hdr->msg_controllen != 0)
+		return EOPNOTSUPP;
+	if (int e = msg_total(hdr, &total); e)
+		return e;
+	auto to = static_cast<const struct sockaddr *>(hdr->msg_name);
+	if (hdr->msg_iovlen <= 1)
+		return sysdep<Sendto>(fd, hdr->msg_iovlen ? hdr->msg_iov[0].iov_base : nullptr,
+				total, flags, to, hdr->msg_namelen, length);
+	auto buf = static_cast<char *>(getAllocator().allocate(total ? total : 1));
+	if (!buf)
+		return ENOBUFS;
+	size_t off = 0;
+	for (int i = 0; i < hdr->msg_iovlen; i++) {
+		memcpy(buf + off, hdr->msg_iov[i].iov_base, hdr->msg_iov[i].iov_len);
+		off += hdr->msg_iov[i].iov_len;
+	}
+	int e = sysdep<Sendto>(fd, buf, total, flags, to, hdr->msg_namelen, length);
+	getAllocator().free(buf);
+	return e;
+}
+
+int Sysdeps<MsgRecv>::operator()(int fd, struct msghdr *hdr, int flags,
+		ssize_t *length) {
+	size_t total;
+	if (int e = msg_total(hdr, &total); e)
+		return e;
+	auto from = static_cast<struct sockaddr *>(hdr->msg_name);
+	socklen_t *fromlen = from ? &hdr->msg_namelen : nullptr;
+	int e;
+	if (hdr->msg_iovlen <= 1) {
+		e = sysdep<Recvfrom>(fd, hdr->msg_iovlen ? hdr->msg_iov[0].iov_base : nullptr,
+				total, flags, from, fromlen, length);
+	} else {
+		auto buf = static_cast<char *>(getAllocator().allocate(total ? total : 1));
+		if (!buf)
+			return ENOBUFS;
+		e = sysdep<Recvfrom>(fd, buf, total, flags, from, fromlen, length);
+		if (!e) {
+			size_t off = 0, left = static_cast<size_t>(*length);
+			for (int i = 0; i < hdr->msg_iovlen && left; i++) {
+				size_t n = hdr->msg_iov[i].iov_len < left ? hdr->msg_iov[i].iov_len : left;
+				memcpy(hdr->msg_iov[i].iov_base, buf + off, n);
+				off += n;
+				left -= n;
+			}
+		}
+		getAllocator().free(buf);
+	}
+	if (!e) {
+		hdr->msg_controllen = 0;
+		hdr->msg_flags = 0;
+	}
+	return e;
+}
 } // namespace mlibc
