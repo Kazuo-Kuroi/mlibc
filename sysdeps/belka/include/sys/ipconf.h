@@ -20,6 +20,7 @@
 #define IP_BINDPROTO (('I' << 8) | 8)	/* int: the protocol */
 #define IP_SETFORWARD (('I' << 8) | 9)	/* int: 1 forward, 0 not */
 #define IP_GETFORWARD (('I' << 8) | 10)	/* returns whether it does */
+#define IP_DEAF (('I' << 8) | 11)	/* int 1: hear nothing more */
 
 /* An interface from two linked DLPI streams (their multiplexor ids). */
 struct ip_ifattach {
