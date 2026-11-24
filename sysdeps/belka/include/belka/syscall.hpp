@@ -167,6 +167,7 @@ enum : long {
 	SYS_shutdown = 252,
 	SYS_setsockopt = 253,
 	SYS_getsockopt = 254,
+	SYS_getentropy = 255,
 };
 
 /* context() commands. */

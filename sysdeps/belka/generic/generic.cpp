@@ -873,6 +873,11 @@ int Sysdeps<GetHostname>::operator()(char *buffer, size_t bufsize) {
 	return 0;
 }
 
+/* getentropy: Belka's call 255, as OpenBSD's: at most 256 bytes. */
+int Sysdeps<GetEntropy>::operator()(void *buffer, size_t length) {
+	return sc(belka::SYS_getentropy, buffer, length).error;
+}
+
 /* sethostname: sysinfo(SI_SET_HOSTNAME), System V's; the name need not end in a NUL. */
 int Sysdeps<SetHostname>::operator()(const char *buffer, size_t bufsize) {
 	char name[256];

@@ -127,6 +127,7 @@ struct BelkaSysdepTags :
 	Uname,
 	GetHostname,
 	SetHostname,
+	GetEntropy,
 	GetPid,
 	GetPpid,
 	GetTid,
